@@ -1,5 +1,5 @@
-import CrowdWeather from "@/components/crowd-weather";
+import AppShell from "@/components/app-shell";
 
 export default function Page() {
-  return <CrowdWeather />;
+  return <AppShell />;
 }

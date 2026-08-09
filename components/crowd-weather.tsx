@@ -593,7 +593,7 @@ function PlanDoc({ s, plan }) {
 }
 
 // ---- 来場者アプリ（スマホモック） ----
-function VisitorApp({ s, hour, setHour, plan }) {
+export function VisitorApp({ s, hour, setHour, plan }) {
   const [tab,setTab]=useState("nav");
   const advice=gateAdvice(hour,s);
   const inStats=hourStats(IN_ZONES,hour,s);
@@ -696,7 +696,7 @@ function VisitorApp({ s, hour, setHour, plan }) {
 }
 
 // ---- データ設計 ----
-function DataView() {
+export function DataView() {
   const open=[
     {n:"人流統計",src:"東京データプラットフォーム",feeds:["混雑"]},
     {n:"道路ネットワーク・幅員",src:"東京都オープンデータ",feeds:["混雑"]},
