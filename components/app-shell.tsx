@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { INK } from "@/lib/forecast/scales";
 import type { Scenario } from "@/lib/forecast/types";
 import OpsConsole from "./ops-console";
+import CompareBar from "./compare-bar";
 import { VisitorApp, DataView } from "./crowd-weather";
 import { dayPlan } from "@/lib/forecast/model";
 
@@ -46,6 +47,7 @@ export default function AppShell() {
       `}</style>
 
       <div style={{ maxWidth: 1360, margin: "0 auto", padding: "20px 18px 72px" }}>
+        <CompareBar />
         <header
           style={{
             display: "flex",
