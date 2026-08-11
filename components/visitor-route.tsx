@@ -57,10 +57,9 @@ export default function VisitorRoute({ scenario, hour }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          audience: "visitor",
-          style: "easy",
+          mode: "route",
           forecast: {
-            用途: "会場内のルート案内。計算済みの経路を来場者にやさしく説明する",
+            注意: route.warnings, // ここと矛盾する文章を書かせない（プロンプト側で禁止）
             出発地: route.steps[0].zone.name,
             目的地: route.steps[route.steps.length - 1].zone.name,
             経路: route.steps.map((s) => s.zone.name),

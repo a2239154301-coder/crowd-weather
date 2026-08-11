@@ -3,6 +3,7 @@ import { callOrca, OrcaError, type OrcaTask } from "@/lib/ai/orca";
 import {
   ADVICE_SYSTEM,
   DIRECTIVE_SYSTEM,
+  ROUTE_SYSTEM,
   EASY_STYLE_INSTRUCTION,
   BRIEFING_SYSTEMS,
   adviceUserPrompt,
@@ -26,7 +27,7 @@ import {
  */
 
 type AdviceRequest = {
-  mode?: "advice" | "directive";
+  mode?: "advice" | "directive" | "route";
   style?: "standard" | "easy";
   audience?: BriefingAudience;
   forecast?: unknown;
@@ -48,7 +49,12 @@ export async function POST(req: Request) {
   const forecast = parsed.forecast ?? body;
 
   // system プロンプトの組み立て: 基本形 → audience 上書き → 文体
-  let system: string = parsed.mode === "directive" ? DIRECTIVE_SYSTEM : ADVICE_SYSTEM;
+  let system: string =
+    parsed.mode === "directive"
+      ? DIRECTIVE_SYSTEM
+      : parsed.mode === "route"
+        ? ROUTE_SYSTEM
+        : ADVICE_SYSTEM;
   let task: OrcaTask = "advice";
   if (parsed.audience) {
     system = BRIEFING_SYSTEMS[parsed.audience] ?? system;
