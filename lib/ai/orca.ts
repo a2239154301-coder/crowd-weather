@@ -13,9 +13,14 @@
 const ORCA_BASE = "https://api.orcarouter.ai/v1";
 const TIMEOUT_MS = 30_000;
 
-/** LLMを呼ぶ用途。CROWD WEATHER では この3つ「だけ」がLLMを使う。 */
+/**
+ * LLMを呼ぶ用途。CROWD WEATHER の設計上のLLM用途は3系統
+ * （①読解 ②文書起草 ③言語化・解釈）で、whatif は③の一員
+ * （自然言語→シナリオ差分の翻訳。予測計算はしない）。
+ */
 export type OrcaTask =
   | "advice" // 予報値 → 運営判断の言語化（イベント中・数回）
+  | "whatif" // 「もし〜だったら?」→ シナリオ差分JSONへの翻訳（advice系・頻繁）
   | "ingest" // 会場図面・過去計画書の読解 → 初期モデル生成（会場ごと1回）
   | "plan"; // 雑踏警備計画書の起草（イベントごと数回）
 
@@ -51,6 +56,15 @@ const ROUTING: Record<OrcaTask, RoutingPolicy> = {
     fallbacks: ["openai/gpt-4o-mini", "anthropic/claude-haiku-4.5"],
     temperature: 0.2,
     maxTokens: 1500,
+  },
+  // 自然言語→シナリオ差分の翻訳。flash-lite では解釈を取りこぼす
+  // （実測2026-08-11: 「無風」のwindMs変換漏れ・「半分」の乗算不能が3問中2問）。
+  // gpt-4o-mini は速度同等で指示追従が安定。
+  whatif: {
+    model: "openai/gpt-4.1",
+    fallbacks: ["anthropic/claude-haiku-4.5", "google/gemini-2.5-flash-lite"],
+    temperature: 0,
+    maxTokens: 800,
   },
   // 会場ごと1回きり。Vision と Structured Outputs が要るので品質優先。
   // ただし本番は Vercel Hobby の60秒上限内で完走することが絶対条件。

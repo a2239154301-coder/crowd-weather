@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Scenario, Weather } from "@/lib/forecast/types";
-import { VENUE, zonesFor, DEFAULT_SCENARIO } from "@/lib/forecast/venue";
+import { VENUE, zonesFor, DEFAULT_SCENARIO, HOURS } from "@/lib/forecast/venue";
 import { centroid, dayPlan, hourPeak } from "@/lib/forecast/model";
 import { fetchLiveWeather } from "@/lib/weather/open-meteo";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
@@ -57,8 +57,10 @@ export default function OpsConsole() {
   }
 
   const [advice, setAdvice] = useState("");
+  const [adviceLabel, setAdviceLabel] = useState("");
   const [aiMeta, setAiMeta] = useState<(AiMeta & { latencyMs: number }) | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  const [easyStyle, setEasyStyle] = useState(false);
 
   const zones = useMemo(() => zonesFor(scope), [scope]);
   const plan = useMemo(() => dayPlan(scenario), [scenario]);
@@ -71,9 +73,51 @@ export default function OpsConsole() {
 
   const staff: StaffMark[] = useMemo(() => marksFor(plan), [plan]);
 
-  async function askOrca() {
+  /** LLMに渡す予報スナップショット。数値はすべて計算エンジンの出力 */
+  function forecastPayload() {
+    // 指示書モード用: この後3時間の時間帯別ピーク（未来が分かるのが本製品の価値）
+    const outlook = HOURS.filter((h) => h > hour && h <= hour + 3).map((h) => {
+      const p = hourPeak(zones, h, scenario);
+      return {
+        hour: h,
+        maxCrowd: p.maxDensity,
+        maxCrowdZone: p.maxDensityZone.name,
+        maxWBGT: p.maxWbgt,
+        maxWBGTZone: p.maxWbgtZone.name,
+      };
+    });
+    return {
+      venue: VENUE.name,
+      hour,
+      scope: scope === "in" ? "会場内" : "会場外",
+      weather: WEATHER_LABEL[scenario.weather],
+      temp: scenario.temp,
+      humidity: scenario.rhPct,
+      windMs: scenario.windMs,
+      tickets: scenario.tickets,
+      current: {
+        maxCrowd: now.maxDensity,
+        maxCrowdZone: now.maxDensityZone.name,
+        maxWBGT: now.maxWbgt,
+        maxWBGTZone: now.maxWbgtZone.name,
+        shadeRate: now.shadeRate,
+      },
+      outlook,
+      dayPlan: {
+        peakCrowd: plan.peakDensity,
+        peakCrowdHour: plan.peakDensityHour,
+        peakCrowdZone: plan.peakDensityZone.name,
+        peakWBGT: plan.peakWbgt,
+        peakWBGTHour: plan.peakWbgtHour,
+        tents: plan.tents,
+      },
+    };
+  }
+
+  async function askOrca(mode: "advice" | "directive") {
     setAiBusy(true);
     setAdvice("");
+    setAdviceLabel(mode === "directive" ? "運営指示書（AI起草）" : "運営判断の提案");
     setAiMeta(null);
     const t0 = Date.now();
     try {
@@ -81,26 +125,9 @@ export default function OpsConsole() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          venue: VENUE.name,
-          hour,
-          scope: scope === "in" ? "会場内" : "会場外",
-          weather: WEATHER_LABEL[scenario.weather],
-          temp: scenario.temp,
-          tickets: scenario.tickets,
-          current: {
-            maxCrowd: now.maxDensity,
-            maxCrowdZone: now.maxDensityZone.name,
-            maxWBGT: now.maxWbgt,
-            maxWBGTZone: now.maxWbgtZone.name,
-            shadeRate: now.shadeRate,
-          },
-          dayPlan: {
-            peakCrowd: plan.peakDensity,
-            peakCrowdHour: plan.peakDensityHour,
-            peakCrowdZone: plan.peakDensityZone.name,
-            peakWBGT: plan.peakWbgt,
-            peakWBGTHour: plan.peakWbgtHour,
-          },
+          mode,
+          style: easyStyle ? "easy" : "standard",
+          forecast: forecastPayload(),
         }),
       });
       const data = await res.json();
@@ -115,6 +142,110 @@ export default function OpsConsole() {
       setAiBusy(false);
     }
   }
+
+  // ── 多声ブリーフィング（同じ予報を3系統に書き分け・並列生成） ──
+  type Brief = { text: string; meta: (AiMeta & { latencyMs: number }) | null; error?: boolean };
+  const [briefs, setBriefs] = useState<Record<string, Brief> | null>(null);
+  const [briefBusy, setBriefBusy] = useState(false);
+
+  async function askBriefings() {
+    setBriefBusy(true);
+    setBriefs(null);
+    const audiences = [
+      ["responsible", "警備責任者"],
+      ["staff", "現場スタッフ"],
+      ["visitor", "来場者"],
+    ] as const;
+    const payload = forecastPayload();
+    const results: Record<string, Brief> = {};
+    await Promise.all(
+      audiences.map(async ([key]) => {
+        const t0 = Date.now();
+        try {
+          const res = await fetch("/api/advice", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ audience: key, forecast: payload }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error);
+          results[key] = { text: data.text, meta: { ...(data.meta as AiMeta), latencyMs: Date.now() - t0 } };
+        } catch {
+          results[key] = { text: "取得できませんでした", meta: null, error: true };
+        }
+      })
+    );
+    setBriefs(results);
+    setBriefBusy(false);
+  }
+
+  // ── What-if 自然言語シナリオ ──────────────────────
+  const [whatifQ, setWhatifQ] = useState("");
+  const [whatifBusy, setWhatifBusy] = useState(false);
+  const [whatif, setWhatif] = useState<null | {
+    interpretation: string;
+    feasible: boolean;
+    scenario: Scenario;
+    hour: number;
+    meta: AiMeta & { latencyMs: number };
+  }>(null);
+  const [whatifError, setWhatifError] = useState("");
+
+  async function askWhatif() {
+    if (!whatifQ.trim() || whatifBusy) return;
+    setWhatifBusy(true);
+    setWhatif(null);
+    setWhatifError("");
+    const t0 = Date.now();
+    try {
+      const res = await fetch("/api/whatif", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: whatifQ, scenario }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error);
+      // 「変更なし」はセンチネル値: weather="keep" / 数値=-1（API側のスキーマ制約に合わせる）
+      const r = data.result as {
+        changes: {
+          weather: Scenario["weather"] | "keep";
+          temp: number;
+          rhPct: number;
+          windMs: number;
+          tickets: number;
+          hour: number;
+        };
+        interpretation: string;
+        feasible: boolean;
+      };
+      const c = r.changes;
+      const next: Scenario = {
+        ...scenario,
+        ...(c.weather !== "keep" ? { weather: c.weather } : {}),
+        ...(c.temp > 0 ? { temp: c.temp } : {}),
+        ...(c.rhPct > 0 ? { rhPct: c.rhPct } : {}),
+        ...(c.windMs > 0 ? { windMs: c.windMs } : {}),
+        ...(c.tickets > 0 ? { tickets: c.tickets } : {}),
+      };
+      setWhatif({
+        interpretation: r.interpretation,
+        feasible: r.feasible,
+        scenario: next,
+        hour: c.hour > 0 ? c.hour : hour,
+        meta: { ...(data.meta as AiMeta), latencyMs: Date.now() - t0 },
+      });
+    } catch (e) {
+      setWhatifError(e instanceof Error && e.message ? e.message : "解釈に失敗しました");
+    } finally {
+      setWhatifBusy(false);
+    }
+  }
+
+  // What-if 比較はエンジンの再計算で出す（LLMは数字を作らない）
+  const whatifPlan = useMemo(
+    () => (whatif && whatif.feasible ? dayPlan(whatif.scenario) : null),
+    [whatif]
+  );
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -196,6 +327,24 @@ export default function OpsConsole() {
                 実況を取得できませんでした（手入力の値のまま）
               </div>
             )}
+            <button
+              onClick={() => askOrca("directive")}
+              disabled={aiBusy}
+              style={{
+                width: "100%",
+                marginBottom: 13,
+                padding: "10px 0",
+                borderRadius: 9,
+                border: "none",
+                background: aiBusy ? INK.raised : INK.accent,
+                color: aiBusy ? INK.textDim : INK.page,
+                fontWeight: 700,
+                fontSize: 12.5,
+                cursor: aiBusy ? "wait" : "pointer",
+              }}
+            >
+              {aiBusy ? "起草中…" : "2. やるべきことを出力"}
+            </button>
             <Field label="天候">
               <div style={{ display: "flex", gap: 6 }}>
                 {(["sunny", "cloudy", "rainy"] as Weather[]).map((w) => (
@@ -438,22 +587,42 @@ export default function OpsConsole() {
                   予報の計算そのものにLLMは使っていない。
                 </div>
               </div>
-              <button
-                onClick={askOrca}
-                disabled={aiBusy}
-                style={{
-                  padding: "10px 18px",
-                  borderRadius: 999,
-                  border: `1px solid ${INK.accent}`,
-                  background: aiBusy ? "transparent" : INK.accent,
-                  color: aiBusy ? INK.accent : INK.page,
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: aiBusy ? "wait" : "pointer",
-                }}
-              >
-                {aiBusy ? "分析中…" : "運営判断を聞く"}
-              </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+                <button
+                  onClick={() => askOrca("advice")}
+                  disabled={aiBusy}
+                  style={{
+                    padding: "10px 18px",
+                    borderRadius: 999,
+                    border: `1px solid ${INK.accent}`,
+                    background: aiBusy ? "transparent" : INK.accent,
+                    color: aiBusy ? INK.accent : INK.page,
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: aiBusy ? "wait" : "pointer",
+                  }}
+                >
+                  {aiBusy ? "分析中…" : "運営判断を聞く"}
+                </button>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 11.5,
+                    color: INK.textDim,
+                    cursor: "pointer",
+                    userSelect: "none",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={easyStyle}
+                    onChange={(e) => setEasyStyle(e.target.checked)}
+                  />
+                  やさしい日本語で出す
+                </label>
+              </div>
             </div>
 
             {advice && (
@@ -469,6 +638,15 @@ export default function OpsConsole() {
                   whiteSpace: "pre-wrap",
                 }}
               >
+                {adviceLabel && (
+                  <div
+                    className="cw-mono"
+                    style={{ fontSize: 10.5, color: INK.textFaint, marginBottom: 7 }}
+                  >
+                    {adviceLabel}
+                    {easyStyle ? "・やさしい日本語" : ""}
+                  </div>
+                )}
                 {advice}
               </div>
             )}
@@ -497,6 +675,215 @@ export default function OpsConsole() {
                   </Chip>
                 )}
                 <Chip color="#93A3C0">{aiMeta.latencyMs}ms</Chip>
+              </div>
+            )}
+
+            {/* ── 多声ブリーフィング: 同じ予報を3系統に書き分け ── */}
+            <div
+              style={{
+                marginTop: 13,
+                paddingTop: 12,
+                borderTop: `1px solid ${INK.hairline}`,
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 220, fontSize: 12, color: INK.textDim, lineHeight: 1.7 }}>
+                <b style={{ color: INK.text }}>3系統ブリーフィング</b> — 同じ予報を
+                「責任者（上位モデル）／スタッフ（軽量）／来場者（軽量・やさしい日本語）」へ
+                並列に書き分ける。適材適所のルーティングが一目で分かるデモ。
+              </div>
+              <button
+                onClick={askBriefings}
+                disabled={briefBusy}
+                style={{
+                  padding: "9px 16px",
+                  borderRadius: 999,
+                  border: `1px solid ${INK.line}`,
+                  background: "transparent",
+                  color: briefBusy ? INK.textFaint : INK.text,
+                  fontWeight: 700,
+                  fontSize: 12.5,
+                  cursor: briefBusy ? "wait" : "pointer",
+                }}
+              >
+                {briefBusy ? "3系統を並列生成中…" : "3系統に配信文を作る"}
+              </button>
+            </div>
+
+            {briefs && (
+              <div
+                className="cw-split"
+                style={{ marginTop: 11, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9 }}
+              >
+                {(
+                  [
+                    ["responsible", "警備責任者向け", "#C4B5FD"],
+                    ["staff", "現場スタッフ向け", "#7DD3FC"],
+                    ["visitor", "来場者向け", "#86EFAC"],
+                  ] as const
+                ).map(([key, label, color]) => {
+                  const b = briefs[key];
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        background: INK.raised,
+                        border: `1px solid ${INK.line}`,
+                        borderTop: `2px solid ${color}`,
+                        borderRadius: 10,
+                        padding: "11px 12px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 700, color }}>{label}</div>
+                      <div style={{ fontSize: 12, lineHeight: 1.8, whiteSpace: "pre-wrap", flex: 1 }}>
+                        {b?.text}
+                      </div>
+                      {b?.meta && (
+                        <div className="cw-mono" style={{ fontSize: 9.5, color: INK.textFaint }}>
+                          {b.meta.servedModel} ／ {(b.meta.latencyMs / 1000).toFixed(1)}s
+                          {b.meta.usage ? ` ／ out ${b.meta.usage.completion_tokens}tok` : ""}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ── What-if 自然言語シナリオ ─────────────── */}
+          <div
+            style={{
+              background: INK.surface,
+              border: `1px solid ${INK.line}`,
+              borderRadius: 12,
+              padding: 16,
+            }}
+          >
+            <div style={{ fontSize: 11, letterSpacing: 1.5, color: INK.textFaint }}>
+              WHAT-IF — 言葉でシナリオを動かす
+            </div>
+            <div style={{ fontSize: 12, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
+              「もし17時に雷雨が来たら？」— AIは質問を条件変更に<b>翻訳するだけ</b>。
+              数字はすべて計算エンジンが出し直す（LLMに予測はさせない）。
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
+              <input
+                value={whatifQ}
+                onChange={(e) => setWhatifQ(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && askWhatif()}
+                placeholder="例: 気温が38度まで上がって無風になったら？"
+                style={{
+                  flex: 1,
+                  padding: "10px 13px",
+                  borderRadius: 9,
+                  border: `1px solid ${INK.line}`,
+                  background: INK.raised,
+                  color: INK.text,
+                  fontSize: 13,
+                }}
+              />
+              <button
+                onClick={askWhatif}
+                disabled={whatifBusy || !whatifQ.trim()}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: 9,
+                  border: "none",
+                  background: whatifBusy ? INK.raised : INK.accent,
+                  color: whatifBusy ? INK.textDim : INK.page,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: whatifBusy ? "wait" : "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {whatifBusy ? "解釈中…" : "試す"}
+              </button>
+            </div>
+
+            {whatifError && (
+              <div style={{ marginTop: 9, fontSize: 12, color: "#FCA5A5" }}>{whatifError}</div>
+            )}
+
+            {whatif && (
+              <div style={{ marginTop: 11 }}>
+                <div style={{ fontSize: 12, color: INK.textDim, lineHeight: 1.7 }}>
+                  解釈: {whatif.interpretation}
+                </div>
+                {whatif.feasible && whatifPlan && (
+                  <div
+                    style={{
+                      marginTop: 9,
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                      gap: 9,
+                    }}
+                  >
+                    <DeltaStat
+                      label="混雑ピーク"
+                      before={plan.peakDensity}
+                      after={whatifPlan.peakDensity}
+                      unit=""
+                      sub={`${whatifPlan.peakDensityHour}:00 ${whatifPlan.peakDensityZone.name}`}
+                    />
+                    <DeltaStat
+                      label="暑熱ピーク WBGT"
+                      before={plan.peakWbgt}
+                      after={whatifPlan.peakWbgt}
+                      unit=""
+                      sub={wbgtBand(whatifPlan.peakWbgt).label}
+                    />
+                    <DeltaStat
+                      label="日よけテント"
+                      before={plan.tents.total}
+                      after={whatifPlan.tents.total}
+                      unit="張"
+                      sub={whatifPlan.tents.total > 0 ? "待機ゾーンに提案" : "不要"}
+                    />
+                    <DeltaStat
+                      label="誘導スタッフ"
+                      before={plan.guide}
+                      after={whatifPlan.guide}
+                      unit="名増員"
+                      sub={whatifPlan.entryControl ? "入退場制限も準備" : "通常運用"}
+                    />
+                  </div>
+                )}
+                {whatif.feasible && (
+                  <button
+                    onClick={() => {
+                      setScenario(whatif.scenario);
+                      setHour(Math.max(VENUE.open, Math.min(VENUE.close, whatif.hour)));
+                      setLiveAt(null);
+                      setWhatif(null);
+                      setWhatifQ("");
+                    }}
+                    style={{
+                      marginTop: 10,
+                      padding: "8px 15px",
+                      borderRadius: 999,
+                      border: `1px solid ${INK.line}`,
+                      background: "transparent",
+                      color: INK.text,
+                      fontWeight: 600,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    この条件を画面全体に適用する
+                  </button>
+                )}
+                <div className="cw-mono" style={{ marginTop: 8, fontSize: 9.5, color: INK.textFaint }}>
+                  解釈: {whatif.meta.servedModel} ／ {(whatif.meta.latencyMs / 1000).toFixed(1)}s ／
+                  再計算: エンジン（LLM不使用）
+                </div>
               </div>
             )}
           </div>
@@ -533,6 +920,46 @@ function marksFor(plan: ReturnType<typeof dayPlan>): StaffMark[] {
 /** 分 → "HH:MM"（テント提案の時間帯表示用） */
 const fmtMin = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+/** What-if 比較の1マス。現行→仮定の変化を矢印と色で示す */
+function DeltaStat({
+  label,
+  before,
+  after,
+  unit,
+  sub,
+}: {
+  label: string;
+  before: number;
+  after: number;
+  unit: string;
+  sub: string;
+}) {
+  const worse = after > before;
+  const same = after === before;
+  const color = same ? INK.textDim : worse ? "#FB7A1E" : "#22C55E";
+  return (
+    <div
+      style={{
+        background: INK.raised,
+        border: `1px solid ${INK.line}`,
+        borderRadius: 10,
+        padding: "10px 12px",
+      }}
+    >
+      <div style={{ fontSize: 10.5, color: INK.textFaint }}>{label}</div>
+      <div className="cw-mono" style={{ marginTop: 4, fontSize: 14 }}>
+        <span style={{ color: INK.textDim }}>{before}</span>
+        <span style={{ color: INK.textFaint }}> → </span>
+        <span style={{ color, fontWeight: 700 }}>
+          {after}
+          {unit}
+        </span>
+      </div>
+      <div style={{ fontSize: 10, color: INK.textFaint, marginTop: 2 }}>{sub}</div>
+    </div>
+  );
+}
 
 // ── 小物 ──────────────────────────────────────────────────────────
 
