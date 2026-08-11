@@ -10,20 +10,38 @@ import CompareBar from "./compare-bar";
 import { VisitorApp, DataView } from "./crowd-weather";
 import { dayPlan } from "@/lib/forecast/model";
 
-type View = "ops" | "ingest" | "app" | "data";
+/**
+ * 画面の骨格。2026-08-11 に情報設計を再編（馬場氏要望1）:
+ *
+ * 従来はフラットな4タブで「誰のための画面か」が読めなかった。
+ * 最上位を **使う人（主催者／来場者）** で分け、主催者側は
+ * 「読み込む → 条件 → 予報 → 出力」の作業手順をステッパーで示す。
+ * 番号は飾りではなく実際の作業順序（このワークフロー自体が製品の主張）。
+ */
 
-const TABS: [View, string][] = [
-  ["ops", "主催者コンソール"],
+type Mode = "organizer" | "visitor";
+type OrganizerView = "ops" | "ingest" | "data";
+
+const ORGANIZER_TABS: [OrganizerView, string][] = [
+  ["ops", "予報コンソール"],
   ["ingest", "会場を読み込む"],
-  ["app", "来場者アプリ"],
   ["data", "データ設計"],
 ];
 
-export default function AppShell() {
-  const [view, setView] = useState<View>("ops");
+/** 作業手順。step→タブの対応があるものはクリックで遷移できる */
+const STEPS: { n: number; label: string; hint: string; goto?: OrganizerView }[] = [
+  { n: 1, label: "会場を読み込む", hint: "写真から初期モデルを生成", goto: "ingest" },
+  { n: 2, label: "条件を設定", hint: "実況の取込み or 手動入力", goto: "ops" },
+  { n: 3, label: "予報を確認", hint: "混雑・暑熱・日陰・What-if", goto: "ops" },
+  { n: 4, label: "出力する", hint: "指示書・計画書・ブリーフィング", goto: "ops" },
+];
 
-  // 来場者アプリ・データ設計タブは移植前のモックのまま。優先01以降で順次刷新する。
-  // 新しい予報モデルの結果を、旧モックが期待する項目名にも詰め替えて渡す。
+export default function AppShell() {
+  const [mode, setMode] = useState<Mode>("organizer");
+  const [view, setView] = useState<OrganizerView>("ops");
+
+  // 来場者アプリは移植前のモックのまま。新しい予報モデルの結果を、
+  // 旧モックが期待する項目名にも詰め替えて渡す。
   const [legacyHour, setLegacyHour] = useState(16);
   const legacyScenario: Scenario = DEFAULT_SCENARIO;
   const legacyPlan = useMemo(() => {
@@ -46,6 +64,7 @@ export default function AppShell() {
         @media (max-width: 900px) {
           .cw-split { grid-template-columns: 1fr !important; }
           .cw-plan  { grid-template-columns: 1fr !important; }
+          .cw-steps { display: none !important; }
         }
       `}</style>
 
@@ -57,7 +76,7 @@ export default function AppShell() {
             alignItems: "center",
             gap: 16,
             flexWrap: "wrap",
-            marginBottom: 16,
+            marginBottom: 12,
           }}
         >
           <div>
@@ -69,50 +88,180 @@ export default function AppShell() {
             </div>
           </div>
 
-          <nav
+          {/* 最上位: 誰のための画面か */}
+          <div
+            role="tablist"
+            aria-label="利用者の切り替え"
             style={{
               marginLeft: "auto",
               display: "flex",
               gap: 3,
               background: INK.surface,
               border: `1px solid ${INK.line}`,
-              borderRadius: 10,
+              borderRadius: 11,
               padding: 3,
             }}
           >
-            {TABS.map(([k, label]) => (
+            {(
+              [
+                ["organizer", "主催者・警備", "予報を作り、配置と文書を出す"],
+                ["visitor", "来場者", "スマホで見る安全情報"],
+              ] as [Mode, string, string][]
+            ).map(([k, label, hint]) => (
               <button
                 key={k}
-                onClick={() => setView(k)}
-                aria-current={view === k ? "page" : undefined}
+                role="tab"
+                aria-selected={mode === k}
+                onClick={() => setMode(k)}
                 style={{
-                  padding: "8px 15px",
-                  borderRadius: 8,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  gap: 1,
+                  padding: "8px 16px",
+                  borderRadius: 9,
                   border: "none",
                   cursor: "pointer",
-                  fontSize: 12.5,
-                  fontWeight: 600,
-                  background: view === k ? INK.text : "transparent",
-                  color: view === k ? INK.page : INK.textDim,
+                  background: mode === k ? INK.text : "transparent",
+                  color: mode === k ? INK.page : INK.textDim,
+                  textAlign: "left",
                 }}
               >
-                {label}
+                <span style={{ fontSize: 13.5, fontWeight: 700 }}>{label}</span>
+                <span style={{ fontSize: 10, opacity: 0.75 }}>{hint}</span>
               </button>
             ))}
-          </nav>
+          </div>
         </header>
 
-        {view === "ops" && <OpsConsole />}
-        {view === "ingest" && <IngestPanel />}
-        {view === "app" && (
-          <VisitorApp
-            s={legacyScenario}
-            hour={legacyHour}
-            setHour={setLegacyHour}
-            plan={legacyPlan}
-          />
+        {mode === "organizer" && (
+          <>
+            {/* 作業手順ステッパー + サブタブ */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+                marginBottom: 14,
+              }}
+            >
+              <nav
+                aria-label="主催者メニュー"
+                style={{
+                  display: "flex",
+                  gap: 3,
+                  background: INK.surface,
+                  border: `1px solid ${INK.line}`,
+                  borderRadius: 10,
+                  padding: 3,
+                }}
+              >
+                {ORGANIZER_TABS.map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setView(k)}
+                    aria-current={view === k ? "page" : undefined}
+                    style={{
+                      padding: "8px 15px",
+                      borderRadius: 8,
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      background: view === k ? INK.raised : "transparent",
+                      color: view === k ? INK.text : INK.textDim,
+                      boxShadow: view === k ? `inset 0 0 0 1px ${INK.line}` : "none",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </nav>
+
+              <ol
+                className="cw-steps"
+                style={{
+                  listStyle: "none",
+                  margin: 0,
+                  marginLeft: "auto",
+                  padding: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0,
+                }}
+              >
+                {STEPS.map((s, i) => (
+                  <li key={s.n} style={{ display: "flex", alignItems: "center" }}>
+                    {i > 0 && (
+                      <span style={{ color: INK.textFaint, fontSize: 11, padding: "0 7px" }}>→</span>
+                    )}
+                    <button
+                      onClick={() => s.goto && setView(s.goto)}
+                      title={s.hint}
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 5,
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "2px 3px",
+                        color:
+                          (s.n === 1 && view === "ingest") || (s.n > 1 && view === "ops")
+                            ? INK.text
+                            : INK.textDim,
+                      }}
+                    >
+                      <span
+                        className="cw-mono"
+                        style={{
+                          fontSize: 10,
+                          border: `1px solid ${INK.line}`,
+                          borderRadius: 999,
+                          width: 16,
+                          height: 16,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        {s.n}
+                      </span>
+                      <span style={{ fontSize: 11.5, fontWeight: 600 }}>{s.label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            {view === "ops" && <OpsConsole />}
+            {view === "ingest" && <IngestPanel />}
+            {view === "data" && <DataView />}
+          </>
         )}
-        {view === "data" && <DataView />}
+
+        {mode === "visitor" && (
+          <>
+            <p
+              style={{
+                margin: "0 0 14px",
+                fontSize: 12.5,
+                color: INK.textDim,
+                lineHeight: 1.8,
+              }}
+            >
+              来場者のスマホに届く画面（モック）。どこが空いていて、どこが日陰で、救護がどこにあるか —
+              これまでスタッフに聞かないと分からなかった情報を手元に。
+            </p>
+            <VisitorApp
+              s={legacyScenario}
+              hour={legacyHour}
+              setHour={setLegacyHour}
+              plan={legacyPlan}
+            />
+          </>
+        )}
 
         <footer
           style={{

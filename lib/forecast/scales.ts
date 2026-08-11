@@ -44,7 +44,14 @@ export function wbgtBand(v: number): Band {
   return WBGT_BANDS[3];
 }
 
-/** 画面の地色。validate_palette.js に渡した surface と同じ値を使うこと */
+/**
+ * 画面の地色。validate_palette.js に渡した surface と同じ値を使うこと。
+ *
+ * 2026-08-11 可読性改善: 「黒画面は格好いいが見づらい」という指摘を受け、
+ * 補助テキスト2階層を明るくした（textDim #93A3C0→#A9B6D0 / textFaint #5D6C8A→#7A88A6）。
+ * surface #121826 に対するコントラスト比: textDim 8.7:1 / textFaint 5.0:1（実測。従来のtextFaintは3.4:1でAA未達だった）。
+ * 段階色（DENSITY/WBGT_BANDS）は変更していないため 08-09 のΔE検証がそのまま有効。
+ */
 export const INK = {
   page: "#0A0E17",
   surface: "#121826",
@@ -52,7 +59,7 @@ export const INK = {
   line: "#243149",
   hairline: "#1B2437",
   text: "#E8EEF9",
-  textDim: "#93A3C0",
-  textFaint: "#5D6C8A",
+  textDim: "#A9B6D0",
+  textFaint: "#7A88A6",
   accent: "#7DD3FC",
 } as const;
