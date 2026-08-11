@@ -6,6 +6,7 @@ import type { Scenario } from "@/lib/forecast/types";
 import { DEFAULT_SCENARIO } from "@/lib/forecast/venue";
 import OpsConsole from "./ops-console";
 import IngestPanel from "./ingest-panel";
+import VisitorRoute from "./visitor-route";
 import CompareBar from "./compare-bar";
 import { VisitorApp, DataView } from "./crowd-weather";
 import { dayPlan } from "@/lib/forecast/model";
@@ -251,15 +252,18 @@ export default function AppShell() {
                 lineHeight: 1.8,
               }}
             >
-              来場者のスマホに届く画面（モック）。どこが空いていて、どこが日陰で、救護がどこにあるか —
+              来場者のスマホに届く画面。どこが空いていて、どこが日陰で、救護がどこにあるか —
               これまでスタッフに聞かないと分からなかった情報を手元に。
             </p>
-            <VisitorApp
-              s={legacyScenario}
-              hour={legacyHour}
-              setHour={setLegacyHour}
-              plan={legacyPlan}
-            />
+            <div style={{ display: "grid", gap: 16 }}>
+              <VisitorRoute scenario={legacyScenario} hour={legacyHour} />
+              <VisitorApp
+                s={legacyScenario}
+                hour={legacyHour}
+                setHour={setLegacyHour}
+                plan={legacyPlan}
+              />
+            </div>
           </>
         )}
 

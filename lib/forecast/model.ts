@@ -61,7 +61,7 @@ function convexHull(points: Point[]): Point[] {
 // ── 太陽と影 ────────────────────────────────────────────────────────
 
 /** viewBox 1単位あたりの実長さの逆数。1000幅 ≒ 400m 想定 */
-const UNITS_PER_METER = 2.5;
+export const UNITS_PER_METER = 2.5;
 
 /** 会場の位置の既定値（東京）。Scenario.geo が渡されればそちらを使う */
 const DEFAULT_GEO_POINT: GeoPoint = { lat: 35.6895, lon: 139.6917, tzOffsetHours: 9 };
