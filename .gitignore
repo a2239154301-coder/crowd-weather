@@ -42,3 +42,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 優先01の検証で出る一時ファイル
+.probe-*.json
+.probe-*.svg
+ingest-result.json
+prod-ingest.json
+public/samples/probe-overlay.svg
+public/samples/venue-sample.png

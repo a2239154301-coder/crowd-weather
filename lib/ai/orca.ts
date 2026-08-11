@@ -53,12 +53,19 @@ const ROUTING: Record<OrcaTask, RoutingPolicy> = {
     maxTokens: 1500,
   },
   // 会場ごと1回きり。Vision と Structured Outputs が要るので品質優先。
-  // TODO(優先01): 実装時に bench.mjs へ vision ケースを足して実測する。
+  //
+  // 実測(2026-08-10): gemini-2.5-pro が 62秒でゾーン10件・構造物11件を返す。
+  // gpt-4o は 6.9秒と速いが3件と粒度が粗く実用にならない。
+  //
+  // ⚠ max_tokens は 8000 では足りない。Geminiは thinking にトークンを使うため、
+  //   本文が748文字で打ち切られる事故が実際に起きた（応答が途中で切れてJSONパース失敗）。
+  //   これは bench で gpt-5-mini・deepseek-v4-flash が本文0字で返ったのと同じ現象。
+  //   出力7千トークン級の本文＋thinking分を見込んで 24000 にしている。
   ingest: {
     model: "google/gemini-2.5-pro",
     fallbacks: ["openai/gpt-4o"],
     temperature: 0,
-    maxTokens: 4000,
+    maxTokens: 24000,
   },
   // 計画書の起草。実測18.7秒だが最も詳細（760字）。速度より文章品質。
   plan: {
@@ -113,19 +120,46 @@ function isRetryable(status: number): boolean {
 }
 
 type ChatCompletion = {
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
   usage?: OrcaUsage;
   error?: { message?: string };
 };
 
+/** 画像入力・構造化出力を含む、1リクエスト分の追加指定 */
+export type OrcaExtras = {
+  /** data URI または https URL。Vision対応モデルにのみ渡す */
+  imageDataUrl?: string;
+  /** OpenAI互換の json_schema。返り値がこのschemaに従う */
+  jsonSchema?: { name: string; schema: unknown };
+  /** タスク既定のmax_tokensを上書きする（画像読解は出力が長い） */
+  maxTokens?: number;
+  /** タスク既定のタイムアウトを上書きする（Visionは60秒超えることがある） */
+  timeoutMs?: number;
+};
+
+type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 async function attempt(
   model: string,
   policy: RoutingPolicy,
-  args: { system: string; user: string },
+  args: { system: string; user: string; extras?: OrcaExtras },
   apiKey: string
 ): Promise<{ text: string; usage: OrcaUsage | null; resolvedModel: string | null; router: string | null }> {
+  const extras = args.extras ?? {};
+  const timeout = extras.timeoutMs ?? TIMEOUT_MS;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  // 画像があるときだけ content を配列にする。テキストのみなら従来どおり文字列
+  const userContent: string | ContentPart[] = extras.imageDataUrl
+    ? [
+        { type: "text", text: args.user },
+        { type: "image_url", image_url: { url: extras.imageDataUrl } },
+      ]
+    : args.user;
+
   try {
     const res = await fetch(`${ORCA_BASE}/chat/completions`, {
       method: "POST",
@@ -138,10 +172,18 @@ async function attempt(
         model,
         messages: [
           { role: "system", content: args.system },
-          { role: "user", content: args.user },
+          { role: "user", content: userContent },
         ],
         temperature: policy.temperature,
-        max_tokens: policy.maxTokens,
+        max_tokens: extras.maxTokens ?? policy.maxTokens,
+        ...(extras.jsonSchema
+          ? {
+              response_format: {
+                type: "json_schema",
+                json_schema: { name: extras.jsonSchema.name, strict: true, schema: extras.jsonSchema.schema },
+              },
+            }
+          : {}),
       }),
     });
 
@@ -150,6 +192,17 @@ async function attempt(
       throw new OrcaError(
         data?.error?.message || `OrcaRouter request failed (${res.status})`,
         res.status
+      );
+    }
+
+    // ⚠ 打ち切りを黙って通さない。
+    // 推論モデルは thinking でトークンを使い切り、本文が途中で切れたまま HTTP 200 を返す。
+    // ここで検出しないと「JSONパース失敗」という遠い場所のエラーとして現れ、原因が追いにくい。
+    const finish = data.choices?.[0]?.finish_reason;
+    if (finish === "length") {
+      throw new OrcaError(
+        `${model} の応答が max_tokens で打ち切られました（出力 ${data.usage?.completion_tokens ?? "?"} トークン）。上限を上げてください`,
+        502
       );
     }
 
@@ -163,7 +216,7 @@ async function attempt(
   } catch (error) {
     if (error instanceof OrcaError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
-      throw new OrcaError(`${model} timed out after ${TIMEOUT_MS}ms`, 504);
+      throw new OrcaError(`${model} timed out after ${timeout}ms`, 504);
     }
     throw new OrcaError(`Failed to reach OrcaRouter (${model})`, 502);
   } finally {
@@ -185,6 +238,7 @@ export async function callOrca(args: {
   task: OrcaTask;
   system: string;
   user: string;
+  extras?: OrcaExtras;
 }): Promise<OrcaResult> {
   const apiKey = process.env.ORCAROUTER_API_KEY;
   if (!apiKey) {
