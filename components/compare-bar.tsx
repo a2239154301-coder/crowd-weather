@@ -10,8 +10,9 @@ import { INK } from "@/lib/forecast/scales";
  */
 
 const PAGES: { href: string; tag: string; label: string; note: string }[] = [
-  { href: "/original", tag: "原案", label: "馬場案", note: "受領時のまま" },
-  { href: "/", tag: "改善案", label: "会場図＋日陰計算", note: "08-09" },
+  { href: "/original", tag: "原案", label: "馬場案 v1", note: "受領時のまま" },
+  { href: "/original-v4", tag: "原案", label: "馬場案 v4", note: "暑熱エンジン・08-10" },
+  { href: "/", tag: "改善案", label: "会場図＋日陰計算", note: "統合中" },
   { href: "/heatmap", tag: "改善案", label: "ヒートマップ試作", note: "太陽位置・風" },
 ];
 
