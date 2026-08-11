@@ -4,14 +4,16 @@ import { useMemo, useState } from "react";
 import { INK } from "@/lib/forecast/scales";
 import type { Scenario } from "@/lib/forecast/types";
 import OpsConsole from "./ops-console";
+import IngestPanel from "./ingest-panel";
 import CompareBar from "./compare-bar";
 import { VisitorApp, DataView } from "./crowd-weather";
 import { dayPlan } from "@/lib/forecast/model";
 
-type View = "ops" | "app" | "data";
+type View = "ops" | "ingest" | "app" | "data";
 
 const TABS: [View, string][] = [
   ["ops", "主催者コンソール"],
+  ["ingest", "会場を読み込む"],
   ["app", "来場者アプリ"],
   ["data", "データ設計"],
 ];
@@ -100,6 +102,7 @@ export default function AppShell() {
         </header>
 
         {view === "ops" && <OpsConsole />}
+        {view === "ingest" && <IngestPanel />}
         {view === "app" && (
           <VisitorApp
             s={legacyScenario}

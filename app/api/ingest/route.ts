@@ -18,8 +18,9 @@ import {
  * 呼び出しは**会場ごとに1回きり**。だから上位モデルを使っても1イベント当たりの原価はほぼ動かない。
  */
 
-// Vision は実測62秒かかるため、Vercelの実行時間上限を上げる
-export const maxDuration = 120;
+// Vercel Hobby の関数実行時間上限は60秒。ここを超える値を書いても効かないので合わせる。
+// この60秒の中に「20秒×2候補のタイムアウト + 最終候補の応答 約9秒 + 前後処理」を収める設計にしている。
+export const maxDuration = 60;
 
 /**
  * json_schema を指定していてもモデルが ```json フェンスを付けて返すことがあるため、
@@ -83,7 +84,10 @@ export async function POST(req: Request) {
       extras: {
         imageDataUrl: dataUrl,
         jsonSchema: { name: "venue", schema: INGEST_JSON_SCHEMA },
-        timeoutMs: 110_000,
+        // 60秒（maxDuration）の中で3候補のフォールバックまで走り切らせるための予算配分。
+        // 20 + 20 + 9 ≈ 49秒 < 60秒。gpt-4.1 の実測は8〜12秒なので通常は1候補目で返る。
+        // タイムアウトを大きくすると、候補が順に沈んだときVercelが先に関数を殺して502になる。
+        timeoutMs: 20_000,
       },
     });
 

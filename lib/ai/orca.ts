@@ -53,19 +53,29 @@ const ROUTING: Record<OrcaTask, RoutingPolicy> = {
     maxTokens: 1500,
   },
   // 会場ごと1回きり。Vision と Structured Outputs が要るので品質優先。
+  // ただし本番は Vercel Hobby の60秒上限内で完走することが絶対条件。
   //
-  // 実測(2026-08-10): gemini-2.5-pro が 62秒でゾーン10件・構造物11件を返す。
-  // gpt-4o は 6.9秒と速いが3件と粒度が粗く実用にならない。
+  // 実測(2026-08-11、1024px JPEG・ゾーン上限8件の指示つき):
+  //   openai/gpt-4.1                8.1秒  zones 8 / buildings 4  確信度high ← 採用
+  //   openai/gpt-4o                 6.9秒  zones 3〜4             粗い。第一フォールバック
+  //   google/gemini-2.5-flash-lite  9.0秒  zones 8                座標が雑（全面を覆うゾーンを作る）。
+  //                                        OpenAI障害時の最終フォールバック
+  //   google/gemini-2.5-pro         54〜77秒                      粒度は最良だが thinking が4,600〜5,700tok
+  //                                        あり60秒に収まらない。不採用
+  //   google/gemini-2.5-flash       52〜58秒  thinking 8,072tok   不採用
+  //   qwen/qwen3-vl-235b-instruct   57.5秒                        不採用
   //
-  // ⚠ max_tokens は 8000 では足りない。Geminiは thinking にトークンを使うため、
-  //   本文が748文字で打ち切られる事故が実際に起きた（応答が途中で切れてJSONパース失敗）。
-  //   これは bench で gpt-5-mini・deepseek-v4-flash が本文0字で返ったのと同じ現象。
-  //   出力7千トークン級の本文＋thinking分を見込んで 24000 にしている。
+  // ⚠ Gemini の thinking は絞れない（2026-08-11実測）。
+  //   公式docsにある reasoning_effort フィールドは low/minimal とも無効
+  //   （reasoning トークン数が全く変わらない）。`-low` サフィックスは
+  //   model_not_found (503)。docsにある機能がこのデプロイには実装されていない。
+  //   画像を1672px→768pxに縮小しても入力トークンは 2421→2287 でほぼ不変
+  //   （時間の支配項は thinking と出力生成であり、画像サイズではない）。
   ingest: {
-    model: "google/gemini-2.5-pro",
-    fallbacks: ["openai/gpt-4o"],
+    model: "openai/gpt-4.1",
+    fallbacks: ["openai/gpt-4o", "google/gemini-2.5-flash-lite"],
     temperature: 0,
-    maxTokens: 24000,
+    maxTokens: 8000,
   },
   // 計画書の起草。実測18.7秒だが最も詳細（760字）。速度より文章品質。
   plan: {
