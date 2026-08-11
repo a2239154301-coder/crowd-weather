@@ -47,9 +47,12 @@ export default function VenueMap({
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
 
-  const shadows = useMemo(() => shadowsAt(hour, scenario.date), [hour, scenario.date]);
+  const shadows = useMemo(
+    () => shadowsAt(hour, scenario.date, scenario.geo),
+    [hour, scenario.date, scenario.geo]
+  );
   const forecast = useMemo(() => forecastZones(zones, hour, scenario), [zones, hour, scenario]);
-  const sun = sunAt(hour, scenario.date);
+  const sun = sunAt(hour, scenario.date, scenario.geo);
   const night = sun.altitudeDeg <= 3;
 
   const active = forecast.find((f) => f.zone.id === hovered) ?? null;
@@ -187,12 +190,8 @@ export default function VenueMap({
           </g>
         ))}
 
-        {/* 6. 会場図としての作法：方位と縮尺 */}
-        <g opacity={0.75}>
-          <line x1={946} y1={82} x2={946} y2={44} stroke={INK.textDim} strokeWidth={1.4} />
-          <path d="M946 40 L942 50 L950 50 Z" fill={INK.textDim} />
-          <text x={946} y={97} textAnchor="middle" fontSize={11} fill={INK.textDim}>N</text>
-        </g>
+        {/* 6. 会場図としての作法：方位・太陽・縮尺 */}
+        <SunCompass sun={sun} night={night} hour={hour} compact={compact} />
         <g opacity={0.7} transform="translate(40, 668)">
           <line x1={0} y1={0} x2={125} y2={0} stroke={INK.textDim} strokeWidth={1.4} />
           <line x1={0} y1={-4} x2={0} y2={4} stroke={INK.textDim} strokeWidth={1.4} />
@@ -239,6 +238,73 @@ export default function VenueMap({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 方位＋太陽の位置（馬場v4の方位コンパスを移植）。
+ *
+ * 実線＝太陽の方位、破線＝影が伸びる向き。画面の影と必ず一致する
+ * （どちらも同じ `sunAt()` の方位角から描いているため）。
+ * 「なぜこの時間にここが日陰なのか」を、地図を見ただけで説明できるようにする部品。
+ */
+function SunCompass({
+  sun,
+  night,
+  hour,
+  compact,
+}: {
+  sun: { azimuthDeg: number; altitudeDeg: number };
+  night: boolean;
+  hour: number;
+  compact: boolean;
+}) {
+  const cx = 928;
+  const cy = 74;
+  const r = compact ? 26 : 34;
+  const rad = (sun.azimuthDeg * Math.PI) / 180;
+  // 画面座標: x=東(右) / y=南(下)。方位角0=北なので (sin, -cos)
+  const sx = cx + Math.sin(rad) * r * 0.72;
+  const sy = cy - Math.cos(rad) * r * 0.72;
+  // 影は太陽の逆方向へ伸びる
+  const shx = cx - Math.sin(rad) * r * 0.92;
+  const shy = cy + Math.cos(rad) * r * 0.92;
+
+  return (
+    <g opacity={0.85} aria-hidden>
+      <circle cx={cx} cy={cy} r={r} fill="rgba(10,14,23,0.5)" stroke={INK.line} strokeWidth={1.4} />
+      <text x={cx} y={cy - r - 6} textAnchor="middle" fontSize={11} fill={INK.textDim} className="cw-mono">N</text>
+      <text x={cx} y={cy + r + 15} textAnchor="middle" fontSize={11} fill={INK.textFaint} className="cw-mono">S</text>
+      <text x={cx + r + 10} y={cy + 4} textAnchor="middle" fontSize={11} fill={INK.textFaint} className="cw-mono">E</text>
+      <text x={cx - r - 10} y={cy + 4} textAnchor="middle" fontSize={11} fill={INK.textFaint} className="cw-mono">W</text>
+
+      {night ? (
+        <text x={cx} y={cy + 4} textAnchor="middle" fontSize={11} fill={INK.textFaint}>
+          日没後
+        </text>
+      ) : (
+        <g style={{ transition: "opacity 400ms ease" }}>
+          {/* 影の向き（破線） */}
+          <line
+            x1={cx}
+            y1={cy}
+            x2={shx}
+            y2={shy}
+            stroke={INK.textFaint}
+            strokeWidth={1.6}
+            strokeDasharray="4 3"
+          />
+          {/* 太陽の向き（実線＋点） */}
+          <line x1={cx} y1={cy} x2={sx} y2={sy} stroke="#FDE047" strokeWidth={2.2} />
+          <circle cx={sx} cy={sy} r={6} fill="#FDE047" />
+          {!compact && (
+            <text x={cx} y={cy + r + 30} textAnchor="middle" fontSize={10} fill={INK.textFaint} className="cw-mono">
+              {hour}:00 高度{sun.altitudeDeg.toFixed(0)}°
+            </text>
+          )}
+        </g>
+      )}
+    </g>
   );
 }
 

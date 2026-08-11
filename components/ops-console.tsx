@@ -4,10 +4,11 @@ import { useMemo, useState } from "react";
 import type { Scenario, Weather } from "@/lib/forecast/types";
 import { VENUE, zonesFor, DEFAULT_SCENARIO, HOURS } from "@/lib/forecast/venue";
 import { centroid, dayPlan, hourPeak } from "@/lib/forecast/model";
-import { fetchLiveWeather } from "@/lib/weather/open-meteo";
+import { fetchLiveWeather, geocode } from "@/lib/weather/open-meteo";
+import HourlyStrip from "./hourly-strip";
+import ZoneTimeline from "./zone-timeline";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
 import VenueMap, { type MapLayer, type StaffMark } from "./venue-map";
-import ForecastTimeline from "./forecast-timeline";
 import SecurityPlan from "./security-plan";
 
 const WEATHER_LABEL: Record<Weather, string> = { sunny: "晴", cloudy: "曇", rainy: "雨" };
@@ -31,12 +32,39 @@ export default function OpsConsole() {
   const [liveBusy, setLiveBusy] = useState(false);
   const [liveAt, setLiveAt] = useState<string | null>(null);
 
+  // 会場の場所（地名 → 緯度経度）。実況の取得先と太陽位置の両方に効く
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeBusy, setPlaceBusy] = useState(false);
+  const [placeError, setPlaceError] = useState("");
+
+  async function applyPlace() {
+    const q = placeQuery.trim();
+    if (!q || placeBusy) return;
+    setPlaceBusy(true);
+    setPlaceError("");
+    try {
+      const hits = await geocode(q);
+      if (hits.length === 0) {
+        setPlaceError(`「${q}」が見つかりませんでした`);
+        return;
+      }
+      const g = hits[0];
+      setScenario((p) => ({ ...p, geo: { name: g.name, lat: g.lat, lon: g.lon } }));
+      setPlaceQuery("");
+      setLiveAt(null);
+    } catch {
+      setPlaceError("場所を取得できませんでした");
+    } finally {
+      setPlaceBusy(false);
+    }
+  }
+
   async function applyLive() {
     if (liveBusy) return;
     setLiveBusy(true);
     setLiveAt(null);
     try {
-      const live = await fetchLiveWeather();
+      const live = await fetchLiveWeather({ lat: scenario.geo.lat, lon: scenario.geo.lon });
       setScenario((p) => ({
         ...p,
         weather: live.weather,
@@ -285,17 +313,73 @@ export default function OpsConsole() {
           </div>
         </div>
         <div style={{ marginLeft: "auto", textAlign: "right" }}>
-          <div style={{ fontSize: 11, color: INK.textFaint }}>{VENUE.name}</div>
+          <div style={{ fontSize: 11, color: INK.textFaint }}>
+            {VENUE.name} ／ {scenario.geo.name}
+          </div>
           <div className="cw-mono" style={{ fontSize: 20, fontWeight: 600, color: INK.text }}>
             {hour}:00
           </div>
         </div>
       </div>
 
+      {/* ── 時間帯別予報（一日の形を最初に見せる） ───────── */}
+      <HourlyStrip
+        zones={zones}
+        scenario={scenario}
+        hour={hour}
+        onHourChange={setHour}
+        scopeLabel={scope === "in" ? "会場内" : "会場外"}
+      />
+
       <div className="cw-split" style={{ display: "grid", gridTemplateColumns: "312px minmax(0,1fr)", gap: 14 }}>
         {/* ── 左レール：条件と打ち手 ───────────────── */}
         <aside style={{ display: "grid", gap: 12, alignContent: "start" }}>
           <Card title="予報条件" note="全タブ連動">
+            <Field label="会場の場所" value={scenario.geo.name}>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  value={placeQuery}
+                  onChange={(e) => setPlaceQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && applyPlace()}
+                  placeholder="東京 / 大阪 / 幕張 …"
+                  aria-label="会場の場所"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    padding: "8px 11px",
+                    borderRadius: 8,
+                    border: `1px solid ${INK.line}`,
+                    background: INK.raised,
+                    color: INK.text,
+                    fontSize: 12.5,
+                  }}
+                />
+                <button
+                  onClick={applyPlace}
+                  disabled={placeBusy || !placeQuery.trim()}
+                  style={{
+                    padding: "8px 13px",
+                    borderRadius: 8,
+                    border: `1px solid ${INK.line}`,
+                    background: "transparent",
+                    color: placeBusy ? INK.textFaint : INK.text,
+                    fontWeight: 600,
+                    fontSize: 12.5,
+                    cursor: placeBusy ? "wait" : "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  設定
+                </button>
+              </div>
+              {placeError && (
+                <div style={{ marginTop: 6, fontSize: 10.5, color: "#FCA5A5" }}>{placeError}</div>
+              )}
+              <div className="cw-mono" style={{ marginTop: 6, fontSize: 10, color: INK.textFaint }}>
+                {scenario.geo.lat.toFixed(3)}°N {scenario.geo.lon.toFixed(3)}°E ／ 実況取得と太陽位置に反映
+              </div>
+            </Field>
+
             <button
               onClick={applyLive}
               disabled={liveBusy}
@@ -327,24 +411,16 @@ export default function OpsConsole() {
                 実況を取得できませんでした（手入力の値のまま）
               </div>
             )}
-            <button
-              onClick={() => askOrca("directive")}
-              disabled={aiBusy}
+            <div
               style={{
-                width: "100%",
                 marginBottom: 13,
-                padding: "10px 0",
-                borderRadius: 9,
-                border: "none",
-                background: aiBusy ? INK.raised : INK.accent,
-                color: aiBusy ? INK.textDim : INK.page,
-                fontWeight: 700,
-                fontSize: 12.5,
-                cursor: aiBusy ? "wait" : "pointer",
+                fontSize: 10.5,
+                color: INK.textFaint,
+                lineHeight: 1.6,
               }}
             >
-              {aiBusy ? "起草中…" : "2. やるべきことを出力"}
-            </button>
+              → 次は右の「2. やるべきことを出力」へ
+            </div>
             <Field label="天候">
               <div style={{ display: "flex", gap: 6 }}>
                 {(["sunny", "cloudy", "rainy"] as Weather[]).map((w) => (
@@ -478,24 +554,6 @@ export default function OpsConsole() {
               </div>
             </div>
 
-            <button
-              onClick={() => setPlanOpen((v) => !v)}
-              style={{
-                marginTop: 13,
-                width: "100%",
-                padding: "12px 0",
-                borderRadius: 10,
-                border: "none",
-                cursor: "pointer",
-                fontWeight: 700,
-                fontSize: 13.5,
-                background: planOpen ? "transparent" : INK.text,
-                color: planOpen ? INK.text : INK.page,
-                boxShadow: planOpen ? `inset 0 0 0 1px ${INK.line}` : "none",
-              }}
-            >
-              {planOpen ? "計画書を閉じる" : "雑踏警備計画書を出力"}
-            </button>
           </Card>
         </aside>
 
@@ -583,27 +641,49 @@ export default function OpsConsole() {
                   この予報を、現場の言葉に翻訳する。
                 </div>
                 <div style={{ fontSize: 12, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
-                  混雑・WBGT・日陰率・来場規模を渡し、次の打ち手を4項目で出す。
+                  <b style={{ color: INK.text }}>2. やるべきことを出力</b> =
+                  「〇時間後に〇〇のリスクが上がる → いま出す指示」の指示書。
+                  <b style={{ color: INK.text }}>運営判断を聞く</b> = 打ち手を4項目で。
                   予報の計算そのものにLLMは使っていない。
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-                <button
-                  onClick={() => askOrca("advice")}
-                  disabled={aiBusy}
-                  style={{
-                    padding: "10px 18px",
-                    borderRadius: 999,
-                    border: `1px solid ${INK.accent}`,
-                    background: aiBusy ? "transparent" : INK.accent,
-                    color: aiBusy ? INK.accent : INK.page,
-                    fontWeight: 700,
-                    fontSize: 13,
-                    cursor: aiBusy ? "wait" : "pointer",
-                  }}
-                >
-                  {aiBusy ? "分析中…" : "運営判断を聞く"}
-                </button>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <button
+                    onClick={() => askOrca("directive")}
+                    disabled={aiBusy}
+                    style={{
+                      padding: "12px 22px",
+                      borderRadius: 999,
+                      border: "none",
+                      background: aiBusy ? INK.raised : INK.accent,
+                      color: aiBusy ? INK.textDim : INK.page,
+                      fontWeight: 700,
+                      fontSize: 13.5,
+                      cursor: aiBusy ? "wait" : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {aiBusy ? "起草中…" : "2. やるべきことを出力"}
+                  </button>
+                  <button
+                    onClick={() => askOrca("advice")}
+                    disabled={aiBusy}
+                    style={{
+                      padding: "12px 18px",
+                      borderRadius: 999,
+                      border: `1px solid ${INK.line}`,
+                      background: "transparent",
+                      color: aiBusy ? INK.textFaint : INK.textDim,
+                      fontWeight: 600,
+                      fontSize: 12.5,
+                      cursor: aiBusy ? "wait" : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    運営判断を聞く
+                  </button>
+                </div>
                 <label
                   style={{
                     display: "flex",
@@ -890,7 +970,47 @@ export default function OpsConsole() {
         </section>
       </div>
 
-      <ForecastTimeline zones={zones} scenario={scenario} hour={hour} onHourChange={setHour} />
+      {/* ── ゾーン別 危険度（どこが、いつ、危険になるか） ── */}
+      <ZoneTimeline zones={zones} scenario={scenario} hour={hour} onHourChange={setHour} />
+
+      {/* ── 計画書の出力。ボタンは出力される場所の直上に置く ── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          flexWrap: "wrap",
+          background: INK.surface,
+          border: `1px solid ${INK.line}`,
+          borderRadius: 14,
+          padding: "14px 16px",
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>
+            この予報を、そのまま提出できる文書にする。
+          </div>
+          <div style={{ fontSize: 12, color: INK.textDim, marginTop: 4, lineHeight: 1.7 }}>
+            雑踏警備計画書＋配置図＋暑熱・日陰図を1枚に。総括はAIが起草し、印刷/PDF保存で手元に残る。
+          </div>
+        </div>
+        <button
+          onClick={() => setPlanOpen((v) => !v)}
+          style={{
+            padding: "13px 26px",
+            borderRadius: 10,
+            border: "none",
+            cursor: "pointer",
+            fontWeight: 700,
+            fontSize: 14,
+            background: planOpen ? "transparent" : INK.text,
+            color: planOpen ? INK.text : INK.page,
+            boxShadow: planOpen ? `inset 0 0 0 1px ${INK.line}` : "none",
+          }}
+        >
+          {planOpen ? "計画書を閉じる" : "雑踏警備計画書を出力 ↓"}
+        </button>
+      </div>
 
       {planOpen && <SecurityPlan scenario={scenario} plan={plan} staff={staff} />}
     </div>

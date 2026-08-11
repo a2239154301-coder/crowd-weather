@@ -6,6 +6,12 @@ export type Weather = "sunny" | "cloudy" | "rainy";
 export type EventDate = { y: number; mo: number; d: number; label: string };
 
 /**
+ * 会場の場所。実況の取得先であり、**太陽位置の計算にも効く**
+ * （緯度が変わると南中高度が変わる＝同じ建物でも影の長さが変わる）。
+ */
+export type VenueGeo = { name: string; lat: number; lon: number };
+
+/**
  * 主催者が動かす予報条件。
  * 2026-08-11 馬場v4の暑熱エンジン統合で RH・風速・開催日 を追加
  * （WBGTを物理計算にしたため湿球・黒球の入力が要る）。
@@ -22,6 +28,8 @@ export type Scenario = {
   windMs: number;
   /** 開催日。太陽位置を実計算する */
   date: EventDate;
+  /** 会場の場所。実況取得と太陽位置の両方に使う */
+  geo: VenueGeo;
 };
 
 export type ZoneKind =

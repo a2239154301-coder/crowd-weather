@@ -1,4 +1,4 @@
-import type { Building, DayPlan, EventDate, Point, Scenario, Zone, ZoneForecast } from "./types";
+import type { Building, DayPlan, EventDate, Point, Scenario, VenueGeo, Zone, ZoneForecast } from "./types";
 import { HOURS, VENUE, IN_ZONE_IDS, DEFAULT_SCENARIO } from "./venue";
 import { solarPosition, type GeoPoint } from "./solar";
 import { wbgtPhysical } from "./wbgt";
@@ -63,8 +63,12 @@ function convexHull(points: Point[]): Point[] {
 /** viewBox 1単位あたりの実長さの逆数。1000幅 ≒ 400m 想定 */
 const UNITS_PER_METER = 2.5;
 
-/** 会場の位置（デモ会場=東京）。会場読込が実装されたら Venue 側へ移す */
-const VENUE_GEO: GeoPoint = { lat: 35.6895, lon: 139.6917, tzOffsetHours: 9 };
+/** 会場の位置の既定値（東京）。Scenario.geo が渡されればそちらを使う */
+const DEFAULT_GEO_POINT: GeoPoint = { lat: 35.6895, lon: 139.6917, tzOffsetHours: 9 };
+
+/** Scenario.geo（緯度経度のみ）を太陽計算用の GeoPoint に変換。国内前提で TZ は +9 固定 */
+const toGeoPoint = (geo?: VenueGeo): GeoPoint =>
+  geo ? { lat: geo.lat, lon: geo.lon, tzOffsetHours: 9 } : DEFAULT_GEO_POINT;
 
 export type Sun = {
   /** 方位角（度・北0/東90/南180/西270） */
@@ -80,9 +84,9 @@ export type Sun = {
  * 2026-08-11、馬場v4の暑熱エンジン統合に合わせて
  * 従来の線形補間デモモデルを実計算に置き換えた（ヒートマップ試作と同じ式に一本化）。
  */
-export function sunAt(hour: number, date?: EventDate): Sun {
+export function sunAt(hour: number, date?: EventDate, geo?: VenueGeo): Sun {
   const d = date ?? DEFAULT_SCENARIO.date;
-  const p = solarPosition(new Date(Date.UTC(d.y, d.mo - 1, d.d)), hour, VENUE_GEO);
+  const p = solarPosition(new Date(Date.UTC(d.y, d.mo - 1, d.d)), hour, toGeoPoint(geo));
   return { azimuthDeg: p.azimuthDeg, altitudeDeg: p.altitudeDeg, intensity: p.intensity };
 }
 
@@ -90,8 +94,8 @@ export function sunAt(hour: number, date?: EventDate): Sun {
  * 建物が落とす影の多角形。
  * 方位角Aの太陽に対し、影は逆向き (-sinA, +cosA) に伸びる（SVG座標: x=東, y=南）。
  */
-export function shadowOf(b: Building, hour: number, date?: EventDate): Point[] | null {
-  const sun = sunAt(hour, date);
+export function shadowOf(b: Building, hour: number, date?: EventDate, geo?: VenueGeo): Point[] | null {
+  const sun = sunAt(hour, date, geo);
   if (sun.altitudeDeg <= 3) return null;
   const rad = (sun.azimuthDeg * Math.PI) / 180;
   const len = Math.min(
@@ -104,10 +108,14 @@ export function shadowOf(b: Building, hour: number, date?: EventDate): Point[] |
   return convexHull([...b.shape, ...moved]);
 }
 
-export function shadowsAt(hour: number, date?: EventDate): { building: Building; shape: Point[] }[] {
+export function shadowsAt(
+  hour: number,
+  date?: EventDate,
+  geo?: VenueGeo
+): { building: Building; shape: Point[] }[] {
   const out: { building: Building; shape: Point[] }[] = [];
   for (const b of VENUE.buildings) {
-    const shape = shadowOf(b, hour, date);
+    const shape = shadowOf(b, hour, date, geo);
     if (shape) out.push({ building: b, shape });
   }
   return out;
@@ -123,12 +131,13 @@ export function shadeFraction(
   zone: Zone,
   hour: number,
   shadows?: { shape: Point[] }[],
-  date?: EventDate
+  date?: EventDate,
+  geo?: VenueGeo
 ): number {
   if (zone.roofed) return 1;
-  const sun = sunAt(hour, date);
+  const sun = sunAt(hour, date, geo);
   if (sun.altitudeDeg <= 3) return 1; // 日没後は全域が日陰
-  const sh = shadows ?? shadowsAt(hour, date);
+  const sh = shadows ?? shadowsAt(hour, date, geo);
   if (sh.length === 0) return 0;
 
   const xs = zone.shape.map((p) => p.x);
@@ -214,8 +223,8 @@ function wbgtFrom(zone: Zone, s: Scenario, sunAltDeg: number, shade: number): nu
 }
 
 export function wbgt(zone: Zone, hour: number, s: Scenario): number {
-  const sun = sunAt(hour, s.date);
-  return wbgtFrom(zone, s, sun.altitudeDeg, shadeFraction(zone, hour, undefined, s.date));
+  const sun = sunAt(hour, s.date, s.geo);
+  return wbgtFrom(zone, s, sun.altitudeDeg, shadeFraction(zone, hour, undefined, s.date, s.geo));
 }
 
 export const gateWaitMin = (zone: Zone, hour: number, s: Scenario): number =>
@@ -225,11 +234,11 @@ export const gateWaitMin = (zone: Zone, hour: number, s: Scenario): number =>
 
 export function forecastZones(zones: Zone[], hour: number, s: Scenario): ZoneForecast[] {
   // 影の多角形は時刻ごとに1回だけ計算し、全ゾーンで使い回す
-  const shadows = shadowsAt(hour, s.date);
-  const sun = sunAt(hour, s.date);
+  const shadows = shadowsAt(hour, s.date, s.geo);
+  const sun = sunAt(hour, s.date, s.geo);
 
   return zones.map((zone) => {
-    const shade = shadeFraction(zone, hour, shadows, s.date);
+    const shade = shadeFraction(zone, hour, shadows, s.date, s.geo);
     return {
       zone,
       density: density(zone, hour, s),
@@ -339,14 +348,14 @@ export function dayPlan(s: Scenario): DayPlan {
   const tentSteps = [];
   for (let m = VENUE.open * 60; m <= VENUE.close * 60; m += 30) {
     const hour = m / 60;
-    const sun = sunAt(hour, s.date);
+    const sun = sunAt(hour, s.date, s.geo);
     const night = sun.altitudeDeg <= 0.5;
-    const shadows = night ? [] : shadowsAt(hour, s.date);
+    const shadows = night ? [] : shadowsAt(hour, s.date, s.geo);
     tentSteps.push({
       minutes: m,
       night,
       zones: tentZones.map((z) => {
-        const shade = night ? 1 : shadeFraction(z, hour, shadows, s.date);
+        const shade = night ? 1 : shadeFraction(z, hour, shadows, s.date, s.geo);
         return { id: z.id, shade, wbgt: wbgtFrom(z, s, sun.altitudeDeg, shade) };
       }),
     });

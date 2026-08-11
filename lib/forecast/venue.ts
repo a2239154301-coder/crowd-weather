@@ -159,4 +159,5 @@ export const DEFAULT_SCENARIO: Scenario = {
   rhPct: 60,
   windMs: 1.5,
   date: { y: 2026, mo: 8, d: 8, label: "8/8 真夏" },
+  geo: { name: "東京", lat: 35.6895, lon: 139.6917 },
 };

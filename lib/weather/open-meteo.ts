@@ -12,8 +12,49 @@ import type { EventDate, Weather } from "@/lib/forecast/types";
  * （手入力値と実況値を画面上で区別する — 実データでない値を実データに見せない）。
  */
 
-/** 東京（会場のデモ座標）。会場を読み込んだら会場の緯度経度に差し替える想定 */
+/** 東京（会場のデモ座標）。会場の地名を入れると `geocode()` で差し替わる */
 export const DEFAULT_GEO = { lat: 35.6895, lon: 139.6917 };
+
+export type GeoPlace = { name: string; lat: number; lon: number };
+
+/**
+ * 地名 → 緯度経度。**国土地理院（GSI）の住所検索API**を使う。
+ *
+ * 馬場氏の要望「会場の場所（東京とか大阪とか）を入れるエリアがあってもいい。
+ * それをmeteoのAPIとリンクさせて場所を取ってくる」への実装。
+ * 緯度経度は実況の取得先になるだけでなく、**太陽位置の計算にも効く**
+ * （緯度で南中高度が変わる＝同じ建物でも影の長さが変わる）。
+ *
+ * ⚠ Open-Meteo の Geocoding API を最初に使ったが、**日本語（漢字）で引けない**
+ * （2026-08-11実測: 「大阪」で0件・"Osaka"なら大阪市が返る）。表示名は日本語化されるが
+ * 検索キーはASCIIのみ。日本のイベント現場で使う以上これは通らないため、
+ * 漢字をそのまま引ける国土地理院APIに変更した。無料・APIキー不要・CORS許可。
+ * 「幕張メッセ」のような施設名でも引ける。
+ *
+ * GSIは表記ゆれに寛容な代わりに別字（大阪→大坂）も返すため、
+ * **入力文字列を含む結果を優先**して並べ替える。
+ */
+export async function geocode(query: string): Promise<GeoPlace[]> {
+  const url = `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`GSI Geocoding HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    properties: { title: string };
+    geometry: { coordinates: [number, number] };
+  }[];
+
+  const all = (data ?? [])
+    .filter((r) => r?.geometry?.coordinates?.length === 2)
+    .map((r) => ({
+      name: r.properties.title,
+      lon: r.geometry.coordinates[0],
+      lat: r.geometry.coordinates[1],
+    }));
+
+  // 入力語をそのまま含むものを先に（別字マッチを後ろへ回す）
+  const exact = all.filter((p) => p.name.includes(query));
+  return (exact.length > 0 ? exact : all).slice(0, 5);
+}
 
 export type LiveWeather = {
   weather: Weather;
