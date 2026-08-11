@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import type { Scenario, Weather } from "@/lib/forecast/types";
-import { VENUE, zonesFor } from "@/lib/forecast/venue";
+import { VENUE, zonesFor, DEFAULT_SCENARIO } from "@/lib/forecast/venue";
 import { centroid, dayPlan, hourPeak } from "@/lib/forecast/model";
+import { fetchLiveWeather } from "@/lib/weather/open-meteo";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
 import VenueMap, { type MapLayer, type StaffMark } from "./venue-map";
 import ForecastTimeline from "./forecast-timeline";
@@ -20,11 +21,40 @@ type AiMeta = {
 };
 
 export default function OpsConsole() {
-  const [scenario, setScenario] = useState<Scenario>({ weather: "sunny", temp: 34, tickets: 24000 });
+  const [scenario, setScenario] = useState<Scenario>(DEFAULT_SCENARIO);
   const [hour, setHour] = useState(15);
   const [scope, setScope] = useState<"in" | "out">("in");
   const [layer, setLayer] = useState<MapLayer>("crowd");
   const [planOpen, setPlanOpen] = useState(false);
+
+  // Open-Meteo 実況（LIVE）。null=手入力のまま / "HH:MM"=実況反映済み / "error"
+  const [liveBusy, setLiveBusy] = useState(false);
+  const [liveAt, setLiveAt] = useState<string | null>(null);
+
+  async function applyLive() {
+    if (liveBusy) return;
+    setLiveBusy(true);
+    setLiveAt(null);
+    try {
+      const live = await fetchLiveWeather();
+      setScenario((p) => ({
+        ...p,
+        weather: live.weather,
+        temp: live.tempC,
+        rhPct: live.rhPct,
+        windMs: live.windMs,
+        date: live.date,
+      }));
+      // 実況時刻をタイムラインへ（開場前・終演後は端にクランプ）
+      const h = Math.round(live.minutes / 60);
+      setHour(Math.max(VENUE.open, Math.min(VENUE.close, h)));
+      setLiveAt(live.timeLabel);
+    } catch {
+      setLiveAt("error");
+    } finally {
+      setLiveBusy(false);
+    }
+  }
 
   const [advice, setAdvice] = useState("");
   const [aiMeta, setAiMeta] = useState<(AiMeta & { latencyMs: number }) | null>(null);
@@ -134,7 +164,38 @@ export default function OpsConsole() {
       <div className="cw-split" style={{ display: "grid", gridTemplateColumns: "312px minmax(0,1fr)", gap: 14 }}>
         {/* ── 左レール：条件と打ち手 ───────────────── */}
         <aside style={{ display: "grid", gap: 12, alignContent: "start" }}>
-          <Card title="予報条件" note="この3つで一日が決まる">
+          <Card title="予報条件" note="全タブ連動">
+            <button
+              onClick={applyLive}
+              disabled={liveBusy}
+              style={{
+                width: "100%",
+                marginBottom: 13,
+                padding: "10px 0",
+                borderRadius: 9,
+                border: `1px solid ${INK.accent}`,
+                background: "transparent",
+                color: INK.accent,
+                fontWeight: 700,
+                fontSize: 12.5,
+                cursor: liveBusy ? "wait" : "pointer",
+              }}
+            >
+              {liveBusy ? "実況を取得中…" : "1. 現在の状況を反映"}
+            </button>
+            {liveAt && liveAt !== "error" && (
+              <div
+                className="cw-mono"
+                style={{ marginTop: -8, marginBottom: 10, fontSize: 10.5, color: "#22C55E" }}
+              >
+                LIVE {scenario.date.label} {liveAt} 時点の実況（Open-Meteo）を反映中
+              </div>
+            )}
+            {liveAt === "error" && (
+              <div style={{ marginTop: -8, marginBottom: 10, fontSize: 10.5, color: "#FCA5A5" }}>
+                実況を取得できませんでした（手入力の値のまま）
+              </div>
+            )}
             <Field label="天候">
               <div style={{ display: "flex", gap: 6 }}>
                 {(["sunny", "cloudy", "rainy"] as Weather[]).map((w) => (
@@ -173,6 +234,28 @@ export default function OpsConsole() {
                 aria-label="予想最高気温"
               />
             </Field>
+            <Field label="湿度" value={`${scenario.rhPct}%`}>
+              <input
+                type="range"
+                min={30}
+                max={95}
+                step={5}
+                value={scenario.rhPct}
+                onChange={(e) => set("rhPct", Number(e.target.value))}
+                aria-label="湿度"
+              />
+            </Field>
+            <Field label="風速" value={`${scenario.windMs.toFixed(1)}m/s`}>
+              <input
+                type="range"
+                min={0.2}
+                max={5}
+                step={0.1}
+                value={scenario.windMs}
+                onChange={(e) => set("windMs", Number(e.target.value))}
+                aria-label="風速"
+              />
+            </Field>
             <Field label="チケット販売数" value={scenario.tickets.toLocaleString()}>
               <input
                 type="range"
@@ -184,6 +267,13 @@ export default function OpsConsole() {
                 aria-label="チケット販売数"
               />
             </Field>
+            <div
+              className="cw-mono"
+              style={{ fontSize: 10.5, color: INK.textFaint, display: "flex", justifyContent: "space-between" }}
+            >
+              <span>開催日 {scenario.date.label}</span>
+              <span>WBGT=湿球黒球の物理計算（湿度・風が効く）</span>
+            </div>
           </Card>
 
           <Card title="推奨オペレーション" note="予報から自動生成">
@@ -195,7 +285,28 @@ export default function OpsConsole() {
               {plan.oneway && <Chip color="#FB7A1E">一方通行化</Chip>}
               {plan.entryControl && <Chip color="#E5254A">入退場制限を準備</Chip>}
               {plan.stationCoord && <Chip color="#C4B5FD">鉄道・警察と退場連携</Chip>}
+              {plan.tents.total > 0 && <Chip color="#FDBA74">日よけテント {plan.tents.total}張</Chip>}
             </div>
+
+            {plan.tents.total > 0 && (
+              <div style={{ marginTop: 10, display: "grid", gap: 3 }}>
+                {plan.tents.list.map((t) => (
+                  <div
+                    key={t.zoneId}
+                    className="cw-mono"
+                    style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: INK.textDim }}
+                  >
+                    <span>{t.zoneName}</span>
+                    <span>
+                      {t.need}張 / {fmtMin(t.from)}–{fmtMin(t.to)}
+                    </span>
+                  </div>
+                ))}
+                <div style={{ fontSize: 10, color: INK.textFaint, lineHeight: 1.6 }}>
+                  WBGT28以上なのに日陰6割未満の待機ゾーンに、3×6mテントの必要枚数を提案（馬場v4）
+                </div>
+              </div>
+            )}
 
             <div
               style={{
@@ -418,6 +529,10 @@ function marksFor(plan: ReturnType<typeof dayPlan>): StaffMark[] {
   put("aid", "aid", "救護", Math.min(2, plan.aid));
   return marks;
 }
+
+/** 分 → "HH:MM"（テント提案の時間帯表示用） */
+const fmtMin = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 // ── 小物 ──────────────────────────────────────────────────────────
 

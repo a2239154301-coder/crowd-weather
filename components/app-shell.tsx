@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { INK } from "@/lib/forecast/scales";
 import type { Scenario } from "@/lib/forecast/types";
+import { DEFAULT_SCENARIO } from "@/lib/forecast/venue";
 import OpsConsole from "./ops-console";
 import IngestPanel from "./ingest-panel";
 import CompareBar from "./compare-bar";
@@ -24,7 +25,7 @@ export default function AppShell() {
   // 来場者アプリ・データ設計タブは移植前のモックのまま。優先01以降で順次刷新する。
   // 新しい予報モデルの結果を、旧モックが期待する項目名にも詰め替えて渡す。
   const [legacyHour, setLegacyHour] = useState(16);
-  const legacyScenario: Scenario = { weather: "sunny", temp: 34, tickets: 24000 };
+  const legacyScenario: Scenario = DEFAULT_SCENARIO;
   const legacyPlan = useMemo(() => {
     const p = dayPlan(legacyScenario);
     return {

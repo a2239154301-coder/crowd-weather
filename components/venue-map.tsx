@@ -47,9 +47,9 @@ export default function VenueMap({
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
 
-  const shadows = useMemo(() => shadowsAt(hour), [hour]);
+  const shadows = useMemo(() => shadowsAt(hour, scenario.date), [hour, scenario.date]);
   const forecast = useMemo(() => forecastZones(zones, hour, scenario), [zones, hour, scenario]);
-  const sun = sunAt(hour);
+  const sun = sunAt(hour, scenario.date);
   const night = sun.altitudeDeg <= 3;
 
   const active = forecast.find((f) => f.zone.id === hovered) ?? null;

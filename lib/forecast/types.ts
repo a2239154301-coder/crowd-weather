@@ -2,13 +2,26 @@
 
 export type Weather = "sunny" | "cloudy" | "rainy";
 
-/** 主催者が動かす3つの変数。これだけで一日の予報が決まる。 */
+/** 開催日。太陽位置（影・日射）の計算に使う */
+export type EventDate = { y: number; mo: number; d: number; label: string };
+
+/**
+ * 主催者が動かす予報条件。
+ * 2026-08-11 馬場v4の暑熱エンジン統合で RH・風速・開催日 を追加
+ * （WBGTを物理計算にしたため湿球・黒球の入力が要る）。
+ */
 export type Scenario = {
   weather: Weather;
   /** 予想最高気温（℃） */
   temp: number;
   /** チケット販売数＝来場規模の最重要変数 */
   tickets: number;
+  /** 相対湿度（%）。WBGTの湿球温度に効く */
+  rhPct: number;
+  /** 風速（m/s）。自然湿球・黒球の対流冷却に効く */
+  windMs: number;
+  /** 開催日。太陽位置を実計算する */
+  date: EventDate;
 };
 
 export type ZoneKind =
@@ -35,6 +48,11 @@ export type Zone = {
   roofed?: boolean;
   /** ラベルを置く位置。省略時は重心 */
   label?: Point;
+  /**
+   * 実際に人が待つ帯の面積（m²）。日よけテント必要数の分母（馬場v4から導入）。
+   * 未設定のゾーンはテント提案の対象外
+   */
+  queueArea?: number;
 };
 
 /** 影を落とす構造物。日陰予報の入力。 */
@@ -104,4 +122,12 @@ export type DayPlan = {
   baselinePersonHours: number;
   optimizedPersonHours: number;
   savedPercent: number;
+  /**
+   * 日よけテントの推奨（馬場v4のテント配置提案を統合）。
+   * from/to は分（例 750 = 12:30）。queueArea を持つゾーンだけが対象
+   */
+  tents: {
+    total: number;
+    list: { zoneId: string; zoneName: string; need: number; from: number; to: number }[];
+  };
 };

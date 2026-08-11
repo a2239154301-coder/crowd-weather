@@ -1,5 +1,8 @@
-import type { Building, DayPlan, Point, Scenario, Zone, ZoneForecast } from "./types";
-import { HOURS, VENUE, IN_ZONE_IDS } from "./venue";
+import type { Building, DayPlan, EventDate, Point, Scenario, Zone, ZoneForecast } from "./types";
+import { HOURS, VENUE, IN_ZONE_IDS, DEFAULT_SCENARIO } from "./venue";
+import { solarPosition, type GeoPoint } from "./solar";
+import { wbgtPhysical } from "./wbgt";
+import { tentPlan } from "./tent";
 
 /**
  * 予報モデル。**LLMを一切呼ばない。** 決定的な計算だけで構成する。
@@ -57,11 +60,11 @@ function convexHull(points: Point[]): Point[] {
 
 // ── 太陽と影 ────────────────────────────────────────────────────────
 
-const SUNRISE = 5.0;
-const SUNSET = 19.0;
-const MAX_ALTITUDE_DEG = 72; // 盛夏の東京の南中高度に近い値
 /** viewBox 1単位あたりの実長さの逆数。1000幅 ≒ 400m 想定 */
 const UNITS_PER_METER = 2.5;
+
+/** 会場の位置（デモ会場=東京）。会場読込が実装されたら Venue 側へ移す */
+const VENUE_GEO: GeoPoint = { lat: 35.6895, lon: 139.6917, tzOffsetHours: 9 };
 
 export type Sun = {
   /** 方位角（度・北0/東90/南180/西270） */
@@ -72,21 +75,23 @@ export type Sun = {
   intensity: number;
 };
 
-/** 簡略な太陽位置モデル（日の出東→南中→日の入り西を線形補間）。デモ用。 */
-export function sunAt(hour: number): Sun {
-  const t = (hour - SUNRISE) / (SUNSET - SUNRISE);
-  if (t <= 0 || t >= 1) return { azimuthDeg: 270, altitudeDeg: 0, intensity: 0 };
-  const altitudeDeg = Math.sin(Math.PI * t) * MAX_ALTITUDE_DEG;
-  const azimuthDeg = 75 + t * (285 - 75);
-  return { azimuthDeg, altitudeDeg, intensity: Math.sin(Math.PI * t) };
+/**
+ * 太陽位置。NOAA近似式（lib/forecast/solar.ts）で開催日から実計算する。
+ * 2026-08-11、馬場v4の暑熱エンジン統合に合わせて
+ * 従来の線形補間デモモデルを実計算に置き換えた（ヒートマップ試作と同じ式に一本化）。
+ */
+export function sunAt(hour: number, date?: EventDate): Sun {
+  const d = date ?? DEFAULT_SCENARIO.date;
+  const p = solarPosition(new Date(Date.UTC(d.y, d.mo - 1, d.d)), hour, VENUE_GEO);
+  return { azimuthDeg: p.azimuthDeg, altitudeDeg: p.altitudeDeg, intensity: p.intensity };
 }
 
 /**
  * 建物が落とす影の多角形。
  * 方位角Aの太陽に対し、影は逆向き (-sinA, +cosA) に伸びる（SVG座標: x=東, y=南）。
  */
-export function shadowOf(b: Building, hour: number): Point[] | null {
-  const sun = sunAt(hour);
+export function shadowOf(b: Building, hour: number, date?: EventDate): Point[] | null {
+  const sun = sunAt(hour, date);
   if (sun.altitudeDeg <= 3) return null;
   const rad = (sun.azimuthDeg * Math.PI) / 180;
   const len = Math.min(
@@ -99,10 +104,10 @@ export function shadowOf(b: Building, hour: number): Point[] | null {
   return convexHull([...b.shape, ...moved]);
 }
 
-export function shadowsAt(hour: number): { building: Building; shape: Point[] }[] {
+export function shadowsAt(hour: number, date?: EventDate): { building: Building; shape: Point[] }[] {
   const out: { building: Building; shape: Point[] }[] = [];
   for (const b of VENUE.buildings) {
-    const shape = shadowOf(b, hour);
+    const shape = shadowOf(b, hour, date);
     if (shape) out.push({ building: b, shape });
   }
   return out;
@@ -117,12 +122,13 @@ export function shadowsAt(hour: number): { building: Building; shape: Point[] }[
 export function shadeFraction(
   zone: Zone,
   hour: number,
-  shadows?: { shape: Point[] }[]
+  shadows?: { shape: Point[] }[],
+  date?: EventDate
 ): number {
   if (zone.roofed) return 1;
-  const sun = sunAt(hour);
+  const sun = sunAt(hour, date);
   if (sun.altitudeDeg <= 3) return 1; // 日没後は全域が日陰
-  const sh = shadows ?? shadowsAt(hour);
+  const sh = shadows ?? shadowsAt(hour, date);
   if (sh.length === 0) return 0;
 
   const xs = zone.shape.map((p) => p.x);
@@ -188,25 +194,28 @@ export function density(zone: Zone, hour: number, s: Scenario): number {
 
 // ── 暑熱 ───────────────────────────────────────────────────────────
 
-/** 日陰率0-1から日射の受け方を線形補間する。全日向6.6 → 全日陰1.6 */
-const SUN_EXPOSED = 6.6;
-const SUN_SHADED = 1.6;
-
-function wbgtFrom(zone: Zone, s: Scenario, solar: number, shade: number): number {
-  const exposure = SUN_EXPOSED - (SUN_EXPOSED - SUN_SHADED) * shade;
-  const v =
-    21 +
-    (s.temp - 28) * 0.6 +
-    solar * exposure +
-    (zone.kind === "queue" ? 1.1 : 0) +
-    (zone.kind === "gate" ? 0.6 : 0);
-  return Math.round(v * 10) / 10;
+/**
+ * ゾーンのWBGT。物理エンジン（lib/forecast/wbgt.ts＝馬場v4から移植）で実計算する。
+ *
+ * 2026-08-11、従来の線形近似（21 + (T-28)*0.6 + …）を廃止。
+ * 日射（Kasten-Young）→湿球（Stull 2011）→自然湿球・黒球→WBGT合成の連鎖に置き換え、
+ * 湿度・風速が結果に効くようになった。日陰率は従来どおり影多角形の面積比（v4の
+ * 二値マッピングより細かい）。ゾーン特性の加算（滞留+1.1 / ゲート+0.6）はv4を踏襲。
+ */
+function wbgtFrom(zone: Zone, s: Scenario, sunAltDeg: number, shade: number): number {
+  const w = wbgtPhysical(shade, Math.max(sunAltDeg, 0), {
+    weather: s.weather,
+    taC: s.temp,
+    rhPct: s.rhPct,
+    windMs: s.windMs,
+  }).wbgt;
+  const adjusted = w + (zone.kind === "queue" ? 1.1 : 0) + (zone.kind === "gate" ? 0.6 : 0);
+  return Math.round(adjusted * 10) / 10;
 }
 
 export function wbgt(zone: Zone, hour: number, s: Scenario): number {
-  const cloudFactor = s.weather === "sunny" ? 1 : s.weather === "cloudy" ? 0.45 : 0.12;
-  const solar = sunAt(hour).intensity * cloudFactor;
-  return wbgtFrom(zone, s, solar, shadeFraction(zone, hour));
+  const sun = sunAt(hour, s.date);
+  return wbgtFrom(zone, s, sun.altitudeDeg, shadeFraction(zone, hour, undefined, s.date));
 }
 
 export const gateWaitMin = (zone: Zone, hour: number, s: Scenario): number =>
@@ -216,17 +225,15 @@ export const gateWaitMin = (zone: Zone, hour: number, s: Scenario): number =>
 
 export function forecastZones(zones: Zone[], hour: number, s: Scenario): ZoneForecast[] {
   // 影の多角形は時刻ごとに1回だけ計算し、全ゾーンで使い回す
-  const shadows = shadowsAt(hour);
-  const sun = sunAt(hour);
-  const cloudFactor = s.weather === "sunny" ? 1 : s.weather === "cloudy" ? 0.45 : 0.12;
-  const solar = sun.intensity * cloudFactor;
+  const shadows = shadowsAt(hour, s.date);
+  const sun = sunAt(hour, s.date);
 
   return zones.map((zone) => {
-    const shade = shadeFraction(zone, hour, shadows);
+    const shade = shadeFraction(zone, hour, shadows, s.date);
     return {
       zone,
       density: density(zone, hour, s),
-      wbgt: wbgtFrom(zone, s, solar, shade),
+      wbgt: wbgtFrom(zone, s, sun.altitudeDeg, shade),
       shadeFraction: shade,
       shaded: shade >= 0.5,
     };
@@ -326,6 +333,39 @@ export function dayPlan(s: Scenario): DayPlan {
   const baselinePersonHours = 34 * HOURS.length;
   const optimizedPersonHours = 22 * HOURS.length + (water + aid + guide) * 4;
 
+  // 日よけテント提案（馬場v4）。30分刻みで日陰率とWBGTを回し、
+  // 「WBGT28以上なのに日陰6割未満」の待機ゾーンに必要枚数を出す
+  const tentZones = all.filter((z) => (z.queueArea ?? 0) > 0);
+  const tentSteps = [];
+  for (let m = VENUE.open * 60; m <= VENUE.close * 60; m += 30) {
+    const hour = m / 60;
+    const sun = sunAt(hour, s.date);
+    const night = sun.altitudeDeg <= 0.5;
+    const shadows = night ? [] : shadowsAt(hour, s.date);
+    tentSteps.push({
+      minutes: m,
+      night,
+      zones: tentZones.map((z) => {
+        const shade = night ? 1 : shadeFraction(z, hour, shadows, s.date);
+        return { id: z.id, shade, wbgt: wbgtFrom(z, s, sun.altitudeDeg, shade) };
+      }),
+    });
+  }
+  const tentResult = tentPlan(
+    tentSteps,
+    tentZones.map((z) => ({ id: z.id, name: z.name, queueArea: z.queueArea ?? 0 }))
+  );
+  const tents = {
+    total: tentResult.total,
+    list: tentResult.list.map((t) => ({
+      zoneId: t.zone.id,
+      zoneName: t.zone.name,
+      need: t.need,
+      from: t.from,
+      to: t.to,
+    })),
+  };
+
   return {
     peakDensity,
     peakDensityHour,
@@ -346,6 +386,7 @@ export function dayPlan(s: Scenario): DayPlan {
     baselinePersonHours,
     optimizedPersonHours,
     savedPercent: Math.round((1 - optimizedPersonHours / baselinePersonHours) * 100),
+    tents,
   };
 }
 

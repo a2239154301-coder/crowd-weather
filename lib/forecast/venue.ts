@@ -1,4 +1,4 @@
-import type { Building, Point, Venue, Zone } from "./types";
+import type { Building, Point, Scenario, Venue, Zone } from "./types";
 
 /**
  * デモ用の架空会場「みなと臨海公園 特設会場」。
@@ -60,16 +60,17 @@ const ground: Venue["ground"] = [
  * base = そのゾーン固有の混みやすさ係数（旧モックの値を踏襲）。
  */
 const inZones: Zone[] = [
+  // queueArea = 実際に人が待つ帯の面積(m²)。テント必要数の分母（値は馬場v4のSZONESを踏襲）
   {
-    id: "corr", name: "駅連絡通路", kind: "corridor", base: 0.9, roofed: true,
+    id: "corr", name: "駅連絡通路", kind: "corridor", base: 0.9, roofed: true, queueArea: 220,
     shape: [{ x: 430, y: 74 }, { x: 570, y: 74 }, { x: 560, y: 165 }, { x: 440, y: 165 }],
   },
   {
-    id: "wg", name: "西ゲート", kind: "gate", base: 0.85,
+    id: "wg", name: "西ゲート", kind: "gate", base: 0.85, queueArea: 180,
     shape: [{ x: 215, y: 168 }, { x: 340, y: 158 }, { x: 345, y: 222 }, { x: 220, y: 232 }],
   },
   {
-    id: "eg", name: "東ゲート", kind: "gate", base: 0.85,
+    id: "eg", name: "東ゲート", kind: "gate", base: 0.85, queueArea: 180,
     shape: [{ x: 680, y: 158 }, { x: 800, y: 168 }, { x: 800, y: 232 }, { x: 678, y: 222 }],
   },
   {
@@ -82,19 +83,19 @@ const inZones: Zone[] = [
     shape: rect(78, 338, 174, 134),
   },
   {
-    id: "shop", name: "物販の列", kind: "queue", base: 0.75,
+    id: "shop", name: "物販の列", kind: "queue", base: 0.75, queueArea: 240,
     shape: [{ x: 620, y: 345 }, { x: 712, y: 340 }, { x: 716, y: 452 }, { x: 624, y: 456 }],
   },
   {
-    id: "food", name: "フードコート", kind: "queue", base: 0.7,
+    id: "food", name: "フードコート", kind: "queue", base: 0.7, queueArea: 200,
     shape: [{ x: 268, y: 342 }, { x: 344, y: 340 }, { x: 348, y: 470 }, { x: 272, y: 472 }],
   },
   {
-    id: "wc", name: "トイレの列", kind: "queue", base: 0.55,
+    id: "wc", name: "トイレの列", kind: "queue", base: 0.55, queueArea: 120,
     shape: rect(268, 492, 96, 62),
   },
   {
-    id: "aid", name: "救護・給水", kind: "aid", base: 0.35, roofed: true,
+    id: "aid", name: "救護・給水", kind: "aid", base: 0.35, roofed: true, queueArea: 100,
     shape: rect(600, 492, 116, 62),
   },
   {
@@ -146,3 +147,16 @@ export const HOURS: number[] = Array.from(
   { length: VENUE.close - VENUE.open + 1 },
   (_, i) => VENUE.open + i
 );
+
+/**
+ * 予報条件の初期値。真夏の屋外フェス想定（馬場v4の既定と同じ）。
+ * Scenario にフィールドを足したら、ここを直せば全画面に行き渡る。
+ */
+export const DEFAULT_SCENARIO: Scenario = {
+  weather: "sunny",
+  temp: 34,
+  tickets: 24000,
+  rhPct: 60,
+  windMs: 1.5,
+  date: { y: 2026, mo: 8, d: 8, label: "8/8 真夏" },
+};
