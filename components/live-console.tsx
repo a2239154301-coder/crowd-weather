@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Scenario, Weather } from "@/lib/forecast/types";
+import { useScenario } from "@/lib/ui/scenario-context";
+import { DAY } from "@/lib/ui/day-theme";
 import { DEFAULT_SCENARIO, HOURS, VENUE } from "@/lib/forecast/venue";
 import { dayPlan, hourPeak } from "@/lib/forecast/model";
 import { fetchLiveWeather } from "@/lib/weather/open-meteo";
@@ -34,21 +36,13 @@ import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
  * 文字は必ず地の墨色で書く。明色地では黄・橙の上の文字が読めなくなるため。
  */
 
-const DAY = {
-  page: "#EEF1F7",
-  surface: "#FFFFFF",
-  line: "#C9D2E4",
-  text: "#0B111F",
-  textDim: "#4A5670",
-  textFaint: "#6C7891",
-};
-
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 const WEATHER_LABEL: Record<Weather, string> = { sunny: "晴", cloudy: "曇", rainy: "雨" };
 
 export default function LiveConsole() {
-  const [scenario, setScenario] = useState<Scenario>(DEFAULT_SCENARIO);
+  // 予報条件は計画モードと共有（計画で作った条件が当日のベースになる）
+  const { scenario, setScenario } = useScenario();
   const [hour, setHour] = useState(15);
   // 実時刻は描画後に入れる（SSRとクライアントで値が食い違うのを避ける）
   const [clock, setClock] = useState<string | null>(null);

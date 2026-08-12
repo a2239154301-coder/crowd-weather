@@ -8,6 +8,10 @@ import OpsConsole from "./ops-console";
 import IngestPanel from "./ingest-panel";
 import VisitorRoute from "./visitor-route";
 import LiveConsole from "./live-console";
+import AdjustConsole from "./adjust-console";
+import StaffConsole from "./staff-console";
+import PlanOutput from "./plan-output";
+import { ScenarioProvider } from "@/lib/ui/scenario-context";
 import CompareBar from "./compare-bar";
 import TrustPanel from "./trust-panel";
 import { VisitorApp, DataView } from "./crowd-weather";
@@ -27,11 +31,13 @@ import { dayPlan } from "@/lib/forecast/model";
  * 事務所のPCではない。
  */
 
-type Mode = "plan" | "live" | "visitor";
-type OrganizerView = "ops" | "ingest" | "data" | "trust";
+type Mode = "plan" | "live" | "staff" | "visitor";
+type OrganizerView = "ops" | "output" | "ingest" | "data" | "trust";
+type LiveView = "status" | "adjust";
 
 const ORGANIZER_TABS: [OrganizerView, string][] = [
   ["ops", "予報コンソール"],
+  ["output", "計画書出力"],
   ["ingest", "会場を読み込む"],
   ["data", "データ設計"],
   ["trust", "コストと安全"],
@@ -48,6 +54,7 @@ const STEPS: { n: number; label: string; hint: string; goto?: OrganizerView }[] 
 export default function AppShell() {
   const [mode, setMode] = useState<Mode>("plan");
   const [view, setView] = useState<OrganizerView>("ops");
+  const [liveView, setLiveView] = useState<LiveView>("status");
 
   // 来場者アプリは移植前のモックのまま。新しい予報モデルの結果を、
   // 旧モックが期待する項目名にも詰め替えて渡す。
@@ -68,6 +75,7 @@ export default function AppShell() {
   }, []);
 
   return (
+    <ScenarioProvider>
     <div style={{ minHeight: "100vh", background: INK.page, color: INK.text }}>
       <style>{`
         @media (max-width: 900px) {
@@ -113,8 +121,9 @@ export default function AppShell() {
           >
             {(
               [
-                ["plan", "準備する", "会場を作り、条件を振り、計画書を出す"],
-                ["live", "当日を回す", "いまどこが危ないか・何をするか"],
+                ["plan", "計画する", "会場を作り、条件を振り、計画書を出す"],
+                ["live", "当日を回す", "状況の確認と、計画の調整"],
+                ["staff", "スタッフ", "指示を受け、状況を報告する"],
                 ["visitor", "来場者", "スマホで見る安全情報"],
               ] as [Mode, string, string][]
             ).map(([k, label, hint]) => (
@@ -246,6 +255,7 @@ export default function AppShell() {
             </div>
 
             {view === "ops" && <OpsConsole />}
+            {view === "output" && <PlanOutput />}
             {view === "ingest" && <IngestPanel />}
             {view === "data" && <DataView />}
             {view === "trust" && <TrustPanel />}
@@ -254,18 +264,61 @@ export default function AppShell() {
 
         {mode === "live" && (
           <>
-            <p
-              style={{
-                margin: "0 0 14px",
-                fontSize: 12.5,
-                color: INK.textDim,
-                lineHeight: 1.8,
-              }}
-            >
-              当日、本部テントで見る画面。スクロールさせない・3秒で読める・片手で押せる。
-              直射日光の下では暗色画面がいちばん読めないので、ここだけ明色にしてある。
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+              <nav
+                aria-label="当日メニュー"
+                style={{
+                  display: "flex",
+                  gap: 3,
+                  background: INK.surface,
+                  border: `1px solid ${INK.line}`,
+                  borderRadius: 10,
+                  padding: 3,
+                }}
+              >
+                {(
+                  [
+                    ["status", "状況 — いまどこが危ないか"],
+                    ["adjust", "調整 — 計画と実際を合わせる"],
+                  ] as [LiveView, string][]
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setLiveView(k)}
+                    aria-current={liveView === k ? "page" : undefined}
+                    style={{
+                      minHeight: 44,
+                      padding: "0 15px",
+                      borderRadius: 8,
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      background: liveView === k ? INK.raised : "transparent",
+                      color: liveView === k ? INK.text : INK.textDim,
+                      boxShadow: liveView === k ? `inset 0 0 0 1px ${INK.line}` : "none",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </nav>
+              <span style={{ fontSize: 12, color: INK.textFaint }}>
+                屋外・スマホ前提のため当日系の画面は明色
+              </span>
+            </div>
+            {liveView === "status" && <LiveConsole />}
+            {liveView === "adjust" && <AdjustConsole />}
+          </>
+        )}
+
+        {mode === "staff" && (
+          <>
+            <p style={{ margin: "0 0 14px", fontSize: 12.5, color: INK.textDim, lineHeight: 1.8 }}>
+              現場スタッフのスマホ画面。名前で入場し、配置ポストの指示を受け、
+              現地の混雑・暑さをワンタップで報告する。
             </p>
-            <LiveConsole />
+            <StaffConsole />
           </>
         )}
 
@@ -312,5 +365,6 @@ export default function AppShell() {
         </footer>
       </div>
     </div>
+    </ScenarioProvider>
   );
 }

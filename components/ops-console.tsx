@@ -11,7 +11,8 @@ import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
 import { TIME_BANDS, arrivalOrder, timeBand, zoneRisks, type ZoneRisk } from "@/lib/forecast/risk";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
 import VenueMap, { type MapLayer, type StaffMark } from "./venue-map";
-import SecurityPlan from "./security-plan";
+import { useScenario } from "@/lib/ui/scenario-context";
+import { postsFor, postsToMarks } from "@/lib/ops/staffing";
 
 const WEATHER_LABEL: Record<Weather, string> = { sunny: "晴", cloudy: "曇", rainy: "雨" };
 const WEATHER_GLYPH: Record<Weather, string> = { sunny: "☀", cloudy: "☁", rainy: "☂" };
@@ -27,11 +28,11 @@ type AiMeta = {
 };
 
 export default function OpsConsole() {
-  const [scenario, setScenario] = useState<Scenario>(DEFAULT_SCENARIO);
+  // 予報条件は全モード共有（計画で変えれば当日・計画書にもそのまま効く）
+  const { scenario, setScenario, set } = useScenario();
   const [hour, setHour] = useState(15);
   const [scope, setScope] = useState<"in" | "out">("in");
   const [layer, setLayer] = useState<MapLayer>("risk");
-  const [planOpen, setPlanOpen] = useState(false);
 
   // Open-Meteo 実況（LIVE）。null=手入力のまま / "HH:MM"=実況反映済み / "error"
   const [liveBusy, setLiveBusy] = useState(false);
@@ -115,10 +116,9 @@ export default function OpsConsole() {
 
   const dayBand = densityBand(plan.peakDensity);
   const heatBand = wbgtBand(plan.peakWbgt);
-  const set = <K extends keyof Scenario>(k: K, v: Scenario[K]) =>
-    setScenario((p) => ({ ...p, [k]: v }));
 
-  const staff: StaffMark[] = useMemo(() => marksFor(plan), [plan]);
+  // 配置ポスト（lib/ops/staffing.ts）。地図にはポストコード付きマークとして出す
+  const staff: StaffMark[] = useMemo(() => postsToMarks(postsFor(plan)), [plan]);
 
   /** LLMに渡す予報スナップショット。数値はすべて計算エンジンの出力 */
   function forecastPayload() {
@@ -1056,68 +1056,9 @@ export default function OpsConsole() {
       {/* ── ゾーン別 危険度（どこが、いつ、危険になるか） ── */}
       <ZoneTimeline zones={zones} scenario={scenario} hour={hour} onHourChange={setHour} />
 
-      {/* ── 計画書の出力。ボタンは出力される場所の直上に置く ── */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-          flexWrap: "wrap",
-          background: INK.surface,
-          border: `1px solid ${INK.line}`,
-          borderRadius: 14,
-          padding: "14px 16px",
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ fontWeight: 600, fontSize: 15 }}>
-            この予報を、そのまま提出できる文書にする。
-          </div>
-          <div style={{ fontSize: 12, color: INK.textDim, marginTop: 4, lineHeight: 1.7 }}>
-            雑踏警備計画書＋配置図＋暑熱・日陰図を1枚に。総括はAIが起草し、印刷/PDF保存で手元に残る。
-          </div>
-        </div>
-        <button
-          onClick={() => setPlanOpen((v) => !v)}
-          style={{
-            padding: "13px 26px",
-            borderRadius: 10,
-            border: "none",
-            cursor: "pointer",
-            fontWeight: 700,
-            fontSize: 14,
-            background: planOpen ? "transparent" : INK.text,
-            color: planOpen ? INK.text : INK.page,
-            boxShadow: planOpen ? `inset 0 0 0 1px ${INK.line}` : "none",
-          }}
-        >
-          {planOpen ? "計画書を閉じる" : "雑踏警備計画書を出力 ↓"}
-        </button>
-      </div>
-
-      {planOpen && <SecurityPlan scenario={scenario} plan={plan} staff={staff} />}
+      {/* 計画書は「計画書出力」タブへ独立（2026-08-13 画面構成再編）。同じScenarioを共有している */}
     </div>
   );
-}
-
-/** 給水・誘導・救護を、その時間帯に最も必要なゾーンへ置く */
-function marksFor(plan: ReturnType<typeof dayPlan>): StaffMark[] {
-  const inside = zonesFor("in");
-  const marks: StaffMark[] = [];
-  const put = (zoneId: string, role: StaffMark["role"], label: string, n: number) => {
-    const z = inside.find((v) => v.id === zoneId);
-    if (!z) return;
-    const c = z.label ?? centroid(z.shape);
-    for (let i = 0; i < n; i++) {
-      marks.push({ at: { x: c.x + (i - (n - 1) / 2) * 34, y: c.y + 26 }, role, label });
-    }
-  };
-  put("shop", "water", "給水", Math.min(2, plan.water));
-  if (plan.water > 2) put("wc", "water", "給水", 1);
-  put("main", "guide", "誘導", Math.min(3, plan.guide));
-  if (plan.guide > 3) put("exit", "guide", "誘導", Math.min(2, plan.guide - 3));
-  put("aid", "aid", "救護", Math.min(2, plan.aid));
-  return marks;
 }
 
 /** 分 → "HH:MM"（テント提案の時間帯表示用） */
