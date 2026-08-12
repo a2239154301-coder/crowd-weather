@@ -4,7 +4,7 @@
 > **状態:** IMPLEMENTED — 本文書は実装済みのコードを説明する
 > **対象:** AI HACK 2026 提出物
 > **対象commit:** `main` ブランチ。機能とcommitの対応は §7 の表を参照
-> **更新日:** 2026-08-11
+> **更新日:** 2026-08-12（commit `16052c8` 時点）
 
 構成・書式は中橋氏の `TECH_STACK_SAMPLE.md`（2026-08-10）に準拠。
 設計判断の経緯・ベンチマーク・ロードマップは本書に**書かない**
@@ -23,7 +23,7 @@
 | Icons | lucide-react | ^1.30.0 | UI icon |
 | AI routing | OrcaRouter API | OpenAI互換 `/v1` | 読解・起草・言語化（§3参照） |
 | HTTP client | native `fetch` | — | Server側からOrcaRouterを呼び出す |
-| Testing | Vitest | ^4 | 予測logicとAI出力検証層のunit test（22件） |
+| Testing | Vitest | ^4 | 予測logic・リスク層・経路探索・原価計算・AI出力検証のunit test（75件） |
 | 実行時検証 | 手書きの正規化層 | — | `normalizeIngested()` がAI出力をclamp・除外（Zodは未導入・§8） |
 | Hosting | Vercel | Hobby（関数60秒上限） | Web applicationとAPIのdeployment |
 | Source control | GitHub | private → 提出時にpublic化 | `a2239154301-coder/crowd-weather` |
@@ -44,7 +44,13 @@
 | 雑踏警備計画書＋総括AI起草 | `/api/plan` + ブラウザ印刷機能でPDF保存 | 実装済み |
 | What-if 自然言語シナリオ | `/api/whatif`（言語→条件差分の翻訳のみ。再計算はエンジン） | 実装済み |
 | 3系統ブリーフィング | `/api/advice`（audience別に並列生成・モデル使い分け） | 実装済み |
-| 来場者アプリ | React（スマホ画面モック） | mock |
+| **総合リスク（混雑×暑熱）と「危険までの残り時間」** | `lib/forecast/risk.ts`（既存計算層を読むだけの派生層・**LLM不使用**） | 実装済み |
+| **当日モード（1画面1判断・明色）** | `components/live-console.tsx` + `/api/advice`（mode=directive） | 実装済み |
+| **来場者の経路案内** | `lib/forecast/route.ts`（ダイクストラ法・**LLM不使用**）＋ `components/visitor-route.tsx` | 実装済み |
+| **来場者の自由文問い合わせ** | `/api/route-intent`（言語→行き先・優先条件への翻訳のみ） | 実装済み |
+| **LLM原価の円換算** | `lib/ai/pricing.ts`（トークン=実測 / 単価=各社公表値） | 実装済み |
+| **実測値の開示パネル** | `components/trust-panel.tsx` + `/api/usage` | 実装済み |
+| 来場者アプリ（旧モック部分） | React（スマホ画面モック） | mock |
 | 読解結果の人手補正UI | — | 未着手 |
 | 読解Venue→予報計算の配線 | `toVenue()` は実装済み・未接続 | 未着手 |
 
@@ -52,8 +58,8 @@
 
 ```mermaid
 flowchart LR
-  A["Next.js UI"] --> B["TypeScript予測エンジン<br/>(solar/wbgt/model/tent)"]
-  A --> C["Next.js API<br/>(/api/ingest /advice /whatif /plan)"]
+  A["Next.js UI"] --> B["TypeScript予測エンジン<br/>(solar/wbgt/model/risk/route/tent)"]
+  A --> C["Next.js API<br/>(/api/ingest /advice /whatif /route-intent /plan)"]
   C --> D["OrcaRouter API"]
   E["Open-Meteo"] --> A
   F["Demo venue fixture<br/>(lib/forecast/venue.ts)"] --> B
@@ -76,9 +82,15 @@ flowchart LR
 | `/api/ingest` | `file`: PNG/JPEG/WebP ≤8MB | `{ venue: IngestedVenue, issues: {level,message}[], meta }` |
 | `/api/advice` | `{ mode?: "advice"\|"directive", style?: "standard"\|"easy", audience?: "responsible"\|"staff"\|"visitor", forecast: object }`（旧形式=bodyそのままも受理） | `{ text: string, meta }` |
 | `/api/whatif` | `{ question: string, scenario: Scenario }` | `{ result: { changes, interpretation, feasible }, meta }` |
+| `/api/route-intent` | `{ question: string, fromId?: string }` | `{ result: { fromId, toId, preference: "safe"\|"cool"\|"short", interpretation, understood }, meta }` |
 | `/api/plan` | `{ scenario, plan }`（計算済みの値のみ） | `{ text: string, meta }` |
 | `/api/models` | GET | モデルID一覧（疎通確認用） |
+| `/api/usage` | GET | OrcaRouterの使用量（信頼パネルの表示元） |
 | `/api/generate` | `{ prompt, strategy? }` | `{ text, model, usage }`（馬場v4互換・/original-v4用） |
+
+`/api/advice` の `mode` は `"advice" | "directive" | "route"`。
+`route` は経路説明専用で、**入力の `warnings` と矛盾する記述を禁止**している
+（混雑した経路に「空いています」と書いた事故があったため。`lib/ai/prompts.ts` 参照）。
 
 型の正本: `lib/forecast/types.ts`（Scenario/Venue/Zone/DayPlan）、
 `lib/ai/ingest-schema.ts`（IngestedVenue + JSON Schema）。
@@ -101,7 +113,7 @@ Secretはcommitしない。localは `.env.local`（`.env.example` をコピー�
 ```bash
 npm install
 npm run typecheck   # tsc --noEmit（strict）
-npm test            # Vitest 22件: WBGT物理・テント提案・AI出力正規化
+npm test            # Vitest 75件: WBGT物理・総合リスク・経路探索・原価・AI出力正規化
 npm run build       # 型チェック込みの本番ビルド
 npm run dev         # http://localhost:3000
 ```
@@ -121,6 +133,11 @@ CI・lint（ESLint）は未導入（§8）。デプロイは main への push �
 | `f07f140` | 暑熱エンジン統合（WBGT物理・Open-Meteo・テント提案） |
 | `9f1b4c6` | AI4系統拡張（指示書・計画書総括+印刷・What-if・ブリーフィング） |
 | `1ed4968` | 情報設計再編（主催者/来場者モード・ステッパー・コントラスト改善） |
+| `63c8f0f` | 時間帯別グラフ・太陽コンパス・ゾーン別危険度・会場の場所入力（国土地理院API） |
+| `1cf926e` | 来場者の経路案内（`route.ts` ダイクストラ法・LLM不使用） |
+| `6bb1afc` | ルート説明AIが計算結果と矛盾する記述を書く問題を修正（`ROUTE_SYSTEM` 新設） |
+| `027e044` | 総合リスク層（`risk.ts`）と当日モード（`live-console.tsx`） |
+| `16052c8` | 全画面の位置づけ整理・当日モードの根拠表示・来場者の自由文問い合わせ |
 
 ## 8. 実装しないもの・未導入のもの
 
