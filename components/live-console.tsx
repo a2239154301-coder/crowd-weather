@@ -15,6 +15,7 @@ import {
   type CurvePoint,
 } from "@/lib/forecast/risk";
 import type { Zone } from "@/lib/forecast/types";
+import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
 
 /**
  * 当日モード（LIVE）— 1画面・1判断。
@@ -100,11 +101,19 @@ export default function LiveConsole() {
 
   // ── 指示書（既存の /api/advice をそのまま使う。新しいAPIは作らない） ──
   const [directive, setDirective] = useState("");
+  const [directiveMeta, setDirectiveMeta] = useState<{
+    servedModel: string;
+    resolvedModel: string | null;
+    usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
+    latencyMs: number;
+  } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
 
   async function askDirective() {
     setAiBusy(true);
     setDirective("");
+    setDirectiveMeta(null);
+    const t0 = Date.now();
     try {
       const outlook = HOURS.filter((h) => h > hour && h <= hour + 3).map((h) => {
         const p = hourPeak(VENUE.zones, h, scenario);
@@ -166,6 +175,7 @@ export default function LiveConsole() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error);
       setDirective(data.text || "指示を取得できませんでした。");
+      if (data.meta) setDirectiveMeta({ ...data.meta, latencyMs: Date.now() - t0 });
     } catch {
       setDirective(
         "指示を取得できませんでした。通信状況と ORCAROUTER_API_KEY を確認してください。"
@@ -419,6 +429,13 @@ export default function LiveConsole() {
             }}
           >
             {directive}
+          </div>
+        )}
+        {directive && directiveMeta && (
+          <div className="cw-mono" style={{ marginTop: 10, fontSize: 13, color: DAY.textFaint }}>
+            {directiveMeta.servedModel} ／ {(directiveMeta.latencyMs / 1000).toFixed(1)}s ／{" "}
+            {formatYen(costYenForMeta({ ...directiveMeta, servedModel: directiveMeta.servedModel }))}
+            （トークン実測×公表単価）
           </div>
         )}
         {!directive && !aiBusy && (

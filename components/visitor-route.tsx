@@ -6,6 +6,7 @@ import { VENUE, zonesFor } from "@/lib/forecast/venue";
 import { toPath, shadowsAt, sunAt } from "@/lib/forecast/model";
 import { anchorOf, destinationsFor, findRoute, type RoutePreference } from "@/lib/forecast/route";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
+import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
 
 /**
  * 来場者向けルート案内（馬場氏の要望「救護・給水までのルートをAIで算出して示せたら」）。
@@ -104,6 +105,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
   const [note, setNote] = useState("");
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteModel, setNoteModel] = useState("");
+  const [noteYen, setNoteYen] = useState<number | null>(null);
 
   async function explain() {
     if (!route || noteBusy) return;
@@ -134,6 +136,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
       if (!res.ok) throw new Error(data?.error);
       setNote(data.text ?? "");
       setNoteModel(data.meta?.servedModel ?? "");
+      setNoteYen(data.meta ? costYenForMeta(data.meta) : null);
     } catch {
       setNote("説明を取得できませんでした。経路そのものは上の地図のとおりです。");
     } finally {
@@ -494,7 +497,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
               )}
               <div className="cw-mono" style={{ marginTop: 9, fontSize: 9.5, color: INK.textFaint, lineHeight: 1.6 }}>
                 経路 = ダイクストラ法（LLM不使用）
-                {noteModel ? ` ／ 説明 = ${noteModel}` : ""}
+                {noteModel ? ` ／ 説明 = ${noteModel}（${formatYen(noteYen)}）` : ""}
               </div>
             </div>
           </aside>

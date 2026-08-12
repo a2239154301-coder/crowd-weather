@@ -24,7 +24,7 @@ export type OrcaTask =
   | "ingest" // 会場図面・過去計画書の読解 → 初期モデル生成（会場ごと1回）
   | "plan"; // 雑踏警備計画書の起草（イベントごと数回）
 
-type RoutingPolicy = {
+export type RoutingPolicy = {
   model: string;
   /** primary が落ちたら順に試す候補 */
   fallbacks: string[];
@@ -49,7 +49,7 @@ type RoutingPolicy = {
  * TODO: ダッシュボードで名前付きルーターを作ったら `orcarouter/<name>` に差し替える。
  *   コードを触らずに方針を変えられるようになる。docs: /routing/named-routers
  */
-const ROUTING: Record<OrcaTask, RoutingPolicy> = {
+export const ROUTING: Record<OrcaTask, RoutingPolicy> = {
   // 実測 2.48秒。イベント中に何度も押されるので速度優先。
   advice: {
     model: "google/gemini-2.5-flash-lite",

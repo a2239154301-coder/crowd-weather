@@ -9,6 +9,7 @@ import IngestPanel from "./ingest-panel";
 import VisitorRoute from "./visitor-route";
 import LiveConsole from "./live-console";
 import CompareBar from "./compare-bar";
+import TrustPanel from "./trust-panel";
 import { VisitorApp, DataView } from "./crowd-weather";
 import { dayPlan } from "@/lib/forecast/model";
 
@@ -27,12 +28,13 @@ import { dayPlan } from "@/lib/forecast/model";
  */
 
 type Mode = "plan" | "live" | "visitor";
-type OrganizerView = "ops" | "ingest" | "data";
+type OrganizerView = "ops" | "ingest" | "data" | "trust";
 
 const ORGANIZER_TABS: [OrganizerView, string][] = [
   ["ops", "予報コンソール"],
   ["ingest", "会場を読み込む"],
   ["data", "データ設計"],
+  ["trust", "コストと安全"],
 ];
 
 /** 作業手順。step→タブの対応があるものはクリックで遷移できる */
@@ -246,6 +248,7 @@ export default function AppShell() {
             {view === "ops" && <OpsConsole />}
             {view === "ingest" && <IngestPanel />}
             {view === "data" && <DataView />}
+            {view === "trust" && <TrustPanel />}
           </>
         )}
 

@@ -9,6 +9,7 @@ import HourlyStrip from "./hourly-strip";
 import ZoneTimeline from "./zone-timeline";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
 import { TIME_BANDS, arrivalOrder, timeBand, zoneRisks, type ZoneRisk } from "@/lib/forecast/risk";
+import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
 import VenueMap, { type MapLayer, type StaffMark } from "./venue-map";
 import SecurityPlan from "./security-plan";
 
@@ -19,7 +20,10 @@ type AiMeta = {
   servedModel: string;
   requestedModel: string;
   fallbackLevel: number;
-  usage: { prompt_tokens: number; completion_tokens: number } | null;
+  /** orcarouter/{name} を呼んだときだけ入る（X-Orca-Router / X-Orca-Resolved-Model） */
+  router: string | null;
+  resolvedModel: string | null;
+  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
 };
 
 export default function OpsConsole() {
@@ -819,6 +823,9 @@ export default function OpsConsole() {
               >
                 <span>処理したモデル</span>
                 <Chip color="#C4B5FD">{aiMeta.servedModel}</Chip>
+                {aiMeta.router && aiMeta.resolvedModel && (
+                  <Chip color="#7DD3FC">ルーター解決 → {aiMeta.resolvedModel}</Chip>
+                )}
                 {aiMeta.fallbackLevel > 0 && (
                   <Chip color="#FB7A1E">第一候補が失敗 → {aiMeta.fallbackLevel}段目で応答</Chip>
                 )}
@@ -828,6 +835,8 @@ export default function OpsConsole() {
                   </Chip>
                 )}
                 <Chip color="#93A3C0">{aiMeta.latencyMs}ms</Chip>
+                {/* トークン=実測（usage）× 公表単価。lib/ai/pricing.ts が唯一の出所 */}
+                <Chip color="#86EFAC">{formatYen(costYenForMeta(aiMeta))}</Chip>
               </div>
             )}
 
@@ -901,6 +910,7 @@ export default function OpsConsole() {
                         <div className="cw-mono" style={{ fontSize: 9.5, color: INK.textFaint }}>
                           {b.meta.servedModel} ／ {(b.meta.latencyMs / 1000).toFixed(1)}s
                           {b.meta.usage ? ` ／ out ${b.meta.usage.completion_tokens}tok` : ""}
+                          {` ／ ${formatYen(costYenForMeta(b.meta))}`}
                         </div>
                       )}
                     </div>
@@ -1034,8 +1044,8 @@ export default function OpsConsole() {
                   </button>
                 )}
                 <div className="cw-mono" style={{ marginTop: 8, fontSize: 9.5, color: INK.textFaint }}>
-                  解釈: {whatif.meta.servedModel} ／ {(whatif.meta.latencyMs / 1000).toFixed(1)}s ／
-                  再計算: エンジン（LLM不使用）
+                  解釈: {whatif.meta.servedModel} ／ {(whatif.meta.latencyMs / 1000).toFixed(1)}s ／{" "}
+                  {formatYen(costYenForMeta(whatif.meta))} ／ 再計算: エンジン（LLM不使用・¥0）
                 </div>
               </div>
             )}

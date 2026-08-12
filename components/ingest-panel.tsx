@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { INK } from "@/lib/forecast/scales";
 import { VENUE_CANVAS, type IngestedVenue, type IngestIssue } from "@/lib/ai/ingest-schema";
 import type { Point, ZoneKind } from "@/lib/forecast/types";
+import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
 
 /**
  * 優先01「会場資料の読解」のアップロードUI。
@@ -53,7 +54,9 @@ type IngestMeta = {
   servedModel: string;
   requestedModel: string;
   fallbackLevel: number;
-  usage: { prompt_tokens: number; completion_tokens: number } | null;
+  router: string | null;
+  resolvedModel: string | null;
+  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
   latencyMs: number;
 };
 
@@ -446,6 +449,7 @@ export default function IngestPanel() {
                   </Chip>
                 )}
                 <Chip color="#93A3C0">{(result.meta.latencyMs / 1000).toFixed(1)}秒</Chip>
+                <Chip color="#86EFAC">{formatYen(costYenForMeta(result.meta))}</Chip>
               </div>
               {resize && (
                 <div className="cw-mono" style={{ marginTop: 9, fontSize: 10.5, color: INK.textFaint, lineHeight: 1.7 }}>
