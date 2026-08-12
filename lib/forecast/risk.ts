@@ -1,7 +1,7 @@
 import type { Band } from "./scales";
 import { DENSITY_BANDS, densityBand, wbgtBand } from "./scales";
 import type { Scenario, Severity, Zone, ZoneForecast } from "./types";
-import { forecastZones } from "./model";
+import { forecastZones, sunAt } from "./model";
 import { HOURS, VENUE } from "./venue";
 
 /**
@@ -191,3 +191,126 @@ export function firstDanger(
 
 /** 会場の全ゾーン（会場内＋会場外）。危険は境界をまたいで移動するので、リスク表示は分けない */
 export const ALL_ZONES: Zone[] = VENUE.zones;
+
+// ── なぜそうなるのか ────────────────────────────────────────────────
+//
+// 「17:00に物販の列が危険」とだけ出しても、現場は動けない。根拠が要る。
+//
+// ⚠ **根拠をLLMに書かせないこと。** 2026-08-12、混雑指数100・警告つきの経路に対して
+// AIが「このルートは比較的空いています」と書いた事故が起きている（HANDOFF §0-A）。
+// 安全系で「なぜ」を生成文にすると、事実を和らげる側に倒れる。
+// ここでは数字と局面名を計算から出し、言葉はテンプレートで組む。
+//
+// ⚠ **`model.ts` の係数表を写さないこと。** 写すと必ず本体とズレる。
+// 要因の分解は `density()` を別の引数で呼び直して差を取る＝**エンジンを問い直す**方式で出す。
+
+/** イベントの局面。`model.ts` の density() が参照する opening / egress と同じ境界 */
+export type Phase = "開場直後" | "通常" | "終演退場";
+
+export function phaseOf(hour: number): Phase {
+  if (hour === VENUE.open) return "開場直後";
+  if (hour >= VENUE.close - 1) return "終演退場";
+  return "通常";
+}
+
+export type DangerReason = {
+  phase: Phase;
+  /** 前の1時間からの混雑の変化。開場時は null */
+  deltaFromPrev: number | null;
+  /** 来場規模の寄与。チケットが半分だったときの同時刻の混雑指数 */
+  densityAtHalfTickets: number;
+  /** 半分の来場規模なら危険帯に入らないか（＝規模が主因かどうか） */
+  scaleIsDriver: boolean;
+  /** 暑熱が段を1つ押し上げているか */
+  heatLifts: boolean;
+  density: number;
+  wbgt: number;
+  shadePct: number;
+  /** そのまま画面に出せる根拠の行。LLMは使っていない */
+  lines: string[];
+};
+
+/**
+ * ある時刻・あるゾーンが「なぜ」その危険度なのかを、計算から分解する。
+ *
+ * 使うのは `forecastZones()` と `density()` だけ。係数の再実装はしていない。
+ */
+export function explainDanger(zone: Zone, hour: number, s: Scenario): DangerReason {
+  const at = forecastZones([zone], hour, s)[0];
+  const prev = hour > VENUE.open ? forecastZones([zone], hour - 1, s)[0] : null;
+
+  // 来場規模の寄与: 同じ時刻・同じ天候でチケットだけ半分にして問い直す
+  const half = forecastZones([zone], hour, {
+    ...s,
+    tickets: Math.round(s.tickets / 2),
+  })[0];
+
+  const phase = phaseOf(hour);
+  const sev = riskSeverity(at.density, at.wbgt);
+  const heatLifts =
+    wbgtBand(at.wbgt).severity === 3 && densityBand(at.density).severity < 3 && sev >= 1;
+  const scaleIsDriver = sev === 3 && riskSeverity(half.density, half.wbgt) < 3;
+  const shadePct = Math.round(at.shadeFraction * 100);
+  // 日没後は全面が影になるので shadeFraction は 1 になる。
+  // それを「日陰率100%」と書くと涼しさの根拠のように読めてしまうため、日没後と明示する
+  const night = sunAt(hour, s.date, s.geo).altitudeDeg <= 3;
+  const shadeText = night ? "日没後（日射なし）" : `日陰率${shadePct}%`;
+
+  const lines: string[] = [];
+
+  if (phase === "終演退場") {
+    lines.push(`終演退場の時間帯（${VENUE.close}:00終演の1時間前から退場が始まる）`);
+  } else if (phase === "開場直後") {
+    lines.push(`開場直後（${VENUE.open}:00開場でゲートに一斉に並ぶ）`);
+  }
+
+  if (prev) {
+    const d = at.density - prev.density;
+    if (d !== 0) {
+      lines.push(`前の1時間から 混雑 ${d > 0 ? "+" : ""}${d}（${prev.density} → ${at.density}）`);
+    }
+  }
+
+  lines.push(
+    `チケット${s.tickets.toLocaleString()}枚。半分なら同じ時刻で 混雑 ${half.density}` +
+      (scaleIsDriver ? "＝危険帯に入らない（来場規模が主因）" : "")
+  );
+
+  if (heatLifts) {
+    lines.push(`WBGT ${at.wbgt}（31℃以上）・${shadeText} のため危険度を1段上げている`);
+  } else if (wbgtBand(at.wbgt).severity === 3) {
+    lines.push(`WBGT ${at.wbgt}（31℃以上）・${shadeText}。混雑だけで既に危険帯`);
+  } else {
+    lines.push(`WBGT ${at.wbgt}・${shadeText}。暑熱は段を押し上げていない`);
+  }
+
+  return {
+    phase,
+    deltaFromPrev: prev ? at.density - prev.density : null,
+    densityAtHalfTickets: half.density,
+    scaleIsDriver,
+    heatLifts,
+    density: at.density,
+    wbgt: at.wbgt,
+    shadePct,
+    lines,
+  };
+}
+
+export type CurvePoint = { hour: number; density: number; wbgt: number; severity: Severity };
+
+/**
+ * ゾーンの1日の推移。当日モードのミニグラフ用。
+ * 「じわじわ上がって20時に跳ねる」が目で分かれば、言葉より早く納得できる。
+ */
+export function zoneDayCurve(zone: Zone, s: Scenario): CurvePoint[] {
+  return HOURS.map((h) => {
+    const f = forecastZones([zone], h, s)[0];
+    return {
+      hour: h,
+      density: f.density,
+      wbgt: f.wbgt,
+      severity: riskSeverity(f.density, f.wbgt),
+    };
+  });
+}

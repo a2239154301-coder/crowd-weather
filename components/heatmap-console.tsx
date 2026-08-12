@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import CompareBar from "./compare-bar";
 import HeatMap from "./heat-map";
 import HourlyStrip from "./hourly-strip";
 import VenueMap from "./venue-map";
@@ -89,14 +88,34 @@ export default function HeatmapConsole() {
     <div style={{ minHeight: "100vh", background: INK.page, color: INK.text }}>
       <style>{`@media (max-width: 900px){ .hm-split{grid-template-columns:1fr !important} }`}</style>
       <div style={{ maxWidth: 1360, margin: "0 auto", padding: "18px 18px 72px" }}>
-        <CompareBar />
+        <a
+          href="/"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            minHeight: 44,
+            padding: "0 14px",
+            borderRadius: 9,
+            border: `1px solid ${INK.line}`,
+            background: INK.surface,
+            color: INK.textDim,
+            fontSize: 12.5,
+            fontWeight: 600,
+            textDecoration: "none",
+            marginBottom: 14,
+          }}
+        >
+          ← 予報コンソールに戻る
+        </a>
 
         <header style={{ marginBottom: 14 }}>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: 1 }}>
             会場図（全画面）
           </h1>
           <p style={{ margin: "6px 0 0", fontSize: 13, color: INK.textDim, lineHeight: 1.8, maxWidth: 820 }}>
-            条件は予報コンソールと同じ <span className="cw-mono">Scenario</span> から作っています。
+            <b style={{ color: INK.text }}>予報コンソールと同じ画面を、地図だけ大きく出したもの</b>です
+            （投影・現場の共有ディスプレイ用）。条件は同じ <span className="cw-mono">Scenario</span> を使っているので、
+            数字がコンソールとずれることはありません。
             <b style={{ color: INK.text }}>リスク予報</b>はゾーン単位で「危険帯に入るまでの残り時間」を、
             <b style={{ color: INK.text }}>連続場</b>は会場を8px格子（125×88）に切った1セルごとの暑さ指数を出します。
             太陽位置は緯度経度と日時からの実計算、地表面の材質と建物の影、風による冷却と風下の淀みを含みます。

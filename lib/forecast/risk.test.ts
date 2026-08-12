@@ -3,10 +3,13 @@ import {
   ALL_ZONES,
   TIME_BANDS,
   arrivalOrder,
+  explainDanger,
+  phaseOf,
   riskCause,
   riskLabel,
   riskSeverity,
   timeBand,
+  zoneDayCurve,
   zoneRisks,
 } from "./risk";
 import { DENSITY_BANDS, densityBand, wbgtBand } from "./scales";
@@ -209,6 +212,88 @@ describe("arrivalOrder — 危険の到来順", () => {
   it("終演まで危険にならないゾーンは落とす", () => {
     const list = arrivalOrder(zoneRisks(ALL_ZONES, 13, S));
     expect(list.every((r) => r.hoursToDanger !== null)).toBe(true);
+  });
+});
+
+describe("explainDanger — 根拠は計算から出す（LLMを使わない）", () => {
+  it("局面の境界が model.ts の density() の挙動と一致している", () => {
+    // phaseOf は opening / egress の境界だけを写している。係数は写していない。
+    // 境界がズレたら、通路ゾーンの混雑が跳ねる時刻とラベルが食い違う＝ここで落ちる
+    const exitZone = ALL_ZONES.find((z) => z.id === "exit")!;
+    const curve = zoneDayCurve(exitZone, S);
+    const egressHours = curve.filter((p) => phaseOf(p.hour) === "終演退場");
+    const normalHours = curve.filter((p) => phaseOf(p.hour) === "通常");
+    const minEgress = Math.min(...egressHours.map((p) => p.density));
+    const maxNormal = Math.max(...normalHours.map((p) => p.density));
+    expect(minEgress).toBeGreaterThan(maxNormal);
+
+    const gate = ALL_ZONES.find((z) => z.id === "wg")!;
+    expect(phaseOf(11)).toBe("開場直後");
+    // 開場の1.7倍は、同じ在場率の直後の時刻より高くなるほどではないが係数としては効く
+    expect(zoneDayCurve(gate, S)[0].density).toBeGreaterThan(0);
+  });
+
+  it("来場規模が主因かどうかを、チケット半分で問い直して判定する", () => {
+    // 定義どおりであること: いま危険で、かつ半分の来場なら危険帯に入らない
+    for (const h of HOURS) {
+      for (const z of ALL_ZONES) {
+        const r = explainDanger(z, h, S);
+        const halfSev = riskSeverity(r.densityAtHalfTickets, r.wbgt);
+        expect(r.scaleIsDriver).toBe(riskSeverity(r.density, r.wbgt) === 3 && halfSev < 3);
+      }
+    }
+    // 信号が死んでいないこと（1日のどこかで必ず立つ）
+    const anyDriver = HOURS.some((h) =>
+      ALL_ZONES.some((z) => explainDanger(z, h, S).scaleIsDriver)
+    );
+    expect(anyDriver).toBe(true);
+  });
+
+  it("真夏の日中はメインステージが「半分の来場でも危険」になる", () => {
+    // 15:00・34℃晴れでは、来場を半分にしても暑熱が段を戻すので危険帯から出ない。
+    // 「人を減らせば安全」ではないことを示す値なので、退化していないか固定する
+    const stage = ALL_ZONES.find((z) => z.id === "main")!;
+    const r = explainDanger(stage, 15, S);
+    expect(r.density).toBe(100);
+    expect(r.densityAtHalfTickets).toBeLessThan(r.density);
+    expect(r.scaleIsDriver).toBe(false);
+    expect(riskSeverity(r.densityAtHalfTickets, r.wbgt)).toBe(3);
+  });
+
+  it("暑熱が段を押し上げているときだけ heatLifts が立つ", () => {
+    for (const h of HOURS) {
+      for (const z of ALL_ZONES) {
+        const r = explainDanger(z, h, S);
+        if (r.heatLifts) {
+          // 押し上げ＝混雑単独では最上位でないが、WBGTが31℃以上
+          expect(r.wbgt).toBeGreaterThanOrEqual(31);
+          expect(riskSeverity(r.density, 0)).toBeLessThan(3);
+        }
+      }
+    }
+  });
+
+  it("根拠の行は必ず1つ以上あり、数字を含む", () => {
+    const r = explainDanger(ALL_ZONES.find((z) => z.id === "exit")!, 20, S);
+    expect(r.lines.length).toBeGreaterThan(0);
+    expect(r.lines.join(" ")).toMatch(/\d/);
+    expect(r.phase).toBe("終演退場");
+  });
+});
+
+describe("zoneDayCurve", () => {
+  it("開場から終演までの全時刻を返す", () => {
+    const c = zoneDayCurve(ALL_ZONES[0], S);
+    expect(c.map((p) => p.hour)).toEqual(HOURS);
+  });
+
+  it("severity は zoneRisks と同じ判定になる", () => {
+    const zone = ALL_ZONES.find((z) => z.id === "main")!;
+    const c = zoneDayCurve(zone, S);
+    for (const p of c) {
+      const r = zoneRisks([zone], p.hour, S)[0];
+      expect(p.severity).toBe(r.severity);
+    }
   });
 });
 

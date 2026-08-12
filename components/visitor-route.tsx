@@ -28,9 +28,66 @@ export default function VisitorRoute({ scenario, hour }: Props) {
   const zones = useMemo(() => zonesFor("in"), []);
   const destinations = useMemo(() => destinationsFor(zones), [zones]);
 
+  /**
+   * 行き先の選択肢は**会場内の全ゾーン**。
+   * `destinationsFor()` は救護・給水とトイレの2つしか返さないが、自由文では
+   * 「物販に行きたい」「ステージへ戻りたい」も来る。解釈結果がプルダウンに無いと
+   * 選択肢が空欄になって「解釈を直せる」という前提が崩れるので、ここで広げる。
+   * 分かりやすい呼び名がある2つはその表記を優先する。
+   */
+  const destinationOptions = useMemo<[string, string][]>(() => {
+    const friendly = new Map(destinations.map((d) => [d.zone.id, d.label]));
+    return zones.map((z) => [z.id, friendly.get(z.id) ?? z.name]);
+  }, [zones, destinations]);
+
   const [fromId, setFromId] = useState("main");
   const [toId, setToId] = useState(destinations[0]?.zone.id ?? "aid");
   const [pref, setPref] = useState<RoutePreference>("safe");
+
+  // ── 自由文での問い合わせ ───────────────────────────────────────
+  // LLMは「言い方 → 出発地・行き先・優先条件」の翻訳だけを行い、
+  // 経路そのものは下の findRoute（ダイクストラ法）が決定的に計算する。
+  // 解釈は必ず画面に出す。安全案内で解釈がブラックボックスだと、
+  // 目的地を取り違えても来場者が気づけない。
+  const [ask, setAsk] = useState("");
+  const [askBusy, setAskBusy] = useState(false);
+  const [intent, setIntent] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function submitAsk() {
+    const q = ask.trim();
+    if (!q || askBusy) return;
+    setAskBusy(true);
+    setIntent(null);
+    try {
+      const res = await fetch("/api/route-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q, fromId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error);
+      const r = data.result as {
+        understood: boolean;
+        fromId?: string;
+        toId?: string;
+        preference?: RoutePreference;
+        interpretation: string;
+      };
+      if (!r.understood) {
+        setIntent({ ok: false, text: r.interpretation });
+        return;
+      }
+      if (r.fromId) setFromId(r.fromId);
+      if (r.toId) setToId(r.toId);
+      if (r.preference) setPref(r.preference);
+      setIntent({ ok: true, text: r.interpretation });
+      setNote("");
+    } catch {
+      setIntent({ ok: false, text: "うまく聞き取れませんでした。下の項目から選んでください。" });
+    } finally {
+      setAskBusy(false);
+    }
+  }
 
   const route = useMemo(
     () => findRoute(zones, fromId, toId, hour, scenario, pref),
@@ -97,18 +154,82 @@ export default function VisitorRoute({ scenario, hour }: Props) {
         }}
       >
         <div className="cw-mono" style={{ fontSize: 11, letterSpacing: 1.5, color: INK.textFaint }}>
-          SAFE ROUTE ── 救護・給水までの道
+          SAFE ROUTE ── 言葉で聞ける会場の道案内
         </div>
         <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>
           いちばん近い道が、いちばん安全とはかぎらない。
         </div>
         <div style={{ fontSize: 12, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
-          混雑と日陰の予報を踏まえて経路を計算します。
-          <b style={{ color: INK.text }}>経路の計算にAIは使っていません</b>
-          （毎回同じ答えが出る必要があるため）。AIは結果を言葉にするだけです。
+          AIが使われるのは<b style={{ color: INK.text }}>言葉を条件に翻訳するところと、結果を言葉にするところ</b>だけ。
+          <b style={{ color: INK.text }}>経路そのものの計算にAIは使っていません</b>
+          （毎回同じ答えが出る必要があるため）。翻訳した条件は必ず画面に出すので、
+          違っていればその場で直せます。
         </div>
 
-        {/* 入力 */}
+        {/* 自由文での問い合わせ。解釈結果は下の項目に反映され、その場で直せる */}
+        <div style={{ display: "flex", gap: 8, marginTop: 13, flexWrap: "wrap" }}>
+          <input
+            value={ask}
+            onChange={(e) => setAsk(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submitAsk()}
+            placeholder="例）日陰を通って救護所に行きたい／トイレ、混んでないところ"
+            aria-label="行きたい場所を自由に入力"
+            style={{
+              flex: "1 1 260px",
+              minHeight: 48,
+              padding: "0 14px",
+              borderRadius: 11,
+              border: `1px solid ${INK.line}`,
+              background: INK.raised,
+              color: INK.text,
+              fontSize: 14,
+            }}
+          />
+          <button
+            onClick={submitAsk}
+            disabled={askBusy}
+            style={{
+              minHeight: 48,
+              padding: "0 22px",
+              borderRadius: 11,
+              border: "none",
+              background: askBusy ? INK.raised : INK.accent,
+              color: askBusy ? INK.textDim : INK.page,
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: askBusy ? "wait" : "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {askBusy ? "聞き取り中…" : "この内容で探す"}
+          </button>
+        </div>
+
+        {intent && (
+          <div
+            role="status"
+            style={{
+              marginTop: 10,
+              padding: "11px 13px",
+              borderRadius: 10,
+              fontSize: 13.5,
+              lineHeight: 1.7,
+              background: INK.raised,
+              border: `1px solid ${intent.ok ? INK.accent : "#FB7A1E"}55`,
+              color: INK.text,
+            }}
+          >
+            <span style={{ color: INK.textDim }}>{intent.ok ? "こう解釈しました：" : "解釈できませんでした："}</span>{" "}
+            {intent.text}
+            {intent.ok && (
+              <div style={{ fontSize: 12, color: INK.textFaint, marginTop: 5 }}>
+                違っていたら下の項目で直せます。経路の計算はこの解釈が確定してから行います。
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 入力（自由文の解釈結果がここに反映される） */}
         <div
           style={{
             display: "grid",
@@ -121,11 +242,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
             <Select value={fromId} onChange={setFromId} options={zones.map((z) => [z.id, z.name])} />
           </Labeled>
           <Labeled label="行き先">
-            <Select
-              value={toId}
-              onChange={setToId}
-              options={destinations.map((d) => [d.zone.id, d.label])}
-            />
+            <Select value={toId} onChange={setToId} options={destinationOptions} />
           </Labeled>
         </div>
 

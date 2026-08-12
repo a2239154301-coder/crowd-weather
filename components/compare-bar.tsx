@@ -7,13 +7,17 @@ import { INK } from "@/lib/forecast/scales";
 /**
  * 原案（Before）と改善案（After）を行き来するための帯。
  * 「どちらを見ているか」を常に明示する。比較が目的の画面なので、これは装飾ではない。
+ *
+ * ⚠ **ここに載せるのは"版"だけ**（2026-08-12）。
+ * 一時 `/heatmap` を並べていたが、あれは同じ版の別の見せ方であって別の版ではない。
+ * 予報コンソールと横並びに見えて「何が違うのか」が読めないという指摘を受けて外した。
+ * 全画面表示へはコンソールの地図から入る。
  */
 
 const PAGES: { href: string; tag: string; label: string; note: string }[] = [
   { href: "/original", tag: "原案", label: "馬場案 v1", note: "受領時のまま" },
   { href: "/original-v4", tag: "原案", label: "馬場案 v4", note: "暑熱エンジン・08-10" },
   { href: "/", tag: "改善案", label: "予報コンソール", note: "準備／当日／来場者" },
-  { href: "/heatmap", tag: "改善案", label: "会場図（全画面）", note: "リスク予報・連続場" },
 ];
 
 export default function CompareBar() {

@@ -608,6 +608,25 @@ export default function OpsConsole() {
               onChange={(v) => setLayer(v as MapLayer)}
             />
             <Legend layer={layer} />
+            <a
+              href="/heatmap"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                minHeight: 44,
+                padding: "0 14px",
+                borderRadius: 9,
+                border: `1px solid ${INK.line}`,
+                background: INK.surface,
+                color: INK.textDim,
+                fontSize: 12.5,
+                fontWeight: 600,
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              全画面で見る ↗
+            </a>
           </div>
 
           <VenueMap zones={zones} hour={hour} scenario={scenario} layer={layer} />

@@ -5,7 +5,16 @@ import type { Scenario, Weather } from "@/lib/forecast/types";
 import { DEFAULT_SCENARIO, HOURS, VENUE } from "@/lib/forecast/venue";
 import { dayPlan, hourPeak } from "@/lib/forecast/model";
 import { fetchLiveWeather } from "@/lib/weather/open-meteo";
-import { arrivalOrder, riskCause, timeBand, zoneRisks } from "@/lib/forecast/risk";
+import {
+  arrivalOrder,
+  explainDanger,
+  riskCause,
+  timeBand,
+  zoneDayCurve,
+  zoneRisks,
+  type CurvePoint,
+} from "@/lib/forecast/risk";
+import type { Zone } from "@/lib/forecast/types";
 
 /**
  * 当日モード（LIVE）— 1画面・1判断。
@@ -292,6 +301,7 @@ export default function LiveConsole() {
                 </span>
               )}
             </div>
+            <Why zone={top.zone} hour={hour} scenario={scenario} markHour={hour} />
           </>
         ) : (
           <div style={{ fontSize: 19, marginTop: 6, color: DAY.textDim, lineHeight: 1.7 }}>
@@ -327,6 +337,12 @@ export default function LiveConsole() {
               要因 {next.dangerCause ?? "—"} ／ その時点で 混雑 {next.dangerDensity} ・ WBGT{" "}
               {next.dangerWbgt}（現在 混雑 {next.density}）
             </div>
+            <Why
+              zone={next.zone}
+              hour={next.dangerHour!}
+              scenario={scenario}
+              markHour={hour}
+            />
             {upcoming.length > 1 && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
                 {upcoming.slice(1, 5).map((r) => (
@@ -413,6 +429,144 @@ export default function LiveConsole() {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * 「なぜそうなるのか」。1日の推移グラフ＋計算から出した根拠の行。
+ *
+ * ⚠ **ここをLLMに書かせない。** 安全系で「なぜ」を生成文にすると事実を和らげる側に倒れる
+ * （08-12にAIが混雑100の経路を「比較的空いています」と書いた事故がある）。
+ * 数字は `explainDanger()` がエンジンを問い直して出したもので、言葉はテンプレート。
+ */
+function Why({
+  zone,
+  hour,
+  scenario,
+  markHour,
+}: {
+  zone: Zone;
+  hour: number;
+  scenario: Scenario;
+  markHour: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const reason = useMemo(() => explainDanger(zone, hour, scenario), [zone, hour, scenario]);
+  const curve = useMemo(() => zoneDayCurve(zone, scenario), [zone, scenario]);
+
+  return (
+    <div style={{ marginTop: 14, borderTop: `1px solid ${DAY.line}`, paddingTop: 12 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        style={{
+          minHeight: 44,
+          padding: "0 16px",
+          borderRadius: 10,
+          border: `1px solid ${DAY.line}`,
+          background: DAY.surface,
+          color: DAY.text,
+          fontSize: 15,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        なぜ？ {open ? "▲" : "▼"}
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          <DayCurve curve={curve} markHour={markHour} focusHour={hour} />
+          <ul style={{ margin: "12px 0 0", paddingLeft: 20, fontSize: 15, lineHeight: 1.9 }}>
+            {reason.lines.map((l, i) => (
+              <li key={i}>{l}</li>
+            ))}
+          </ul>
+          <p style={{ margin: "10px 0 0", fontSize: 13, color: DAY.textFaint, lineHeight: 1.7 }}>
+            数字はすべて予報エンジンの計算。この根拠の作成にAIは使っていません。
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** ゾーンの1日の混雑推移。危険帯の時刻を色で打つ */
+function DayCurve({
+  curve,
+  markHour,
+  focusHour,
+}: {
+  curve: CurvePoint[];
+  markHour: number;
+  focusHour: number;
+}) {
+  const W = 620;
+  const H = 132;
+  const padL = 34;
+  const padB = 22;
+  const x = (h: number) =>
+    padL + ((h - curve[0].hour) / (curve[curve.length - 1].hour - curve[0].hour)) * (W - padL - 12);
+  const y = (d: number) => H - padB - (d / 100) * (H - padB - 10);
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      style={{ width: "100%", height: "auto", display: "block" }}
+      role="img"
+      aria-label={`このゾーンの1日の混雑推移。危険帯に入る時刻を色で示す`}
+    >
+      {[0, 50, 75, 100].map((v) => (
+        <g key={v}>
+          <line
+            x1={padL}
+            y1={y(v)}
+            x2={W - 12}
+            y2={y(v)}
+            stroke={v === 75 ? "#E5254A" : DAY.line}
+            strokeWidth={v === 75 ? 1.4 : 1}
+            strokeDasharray={v === 75 ? "5 4" : undefined}
+          />
+          <text x={padL - 6} y={y(v) + 4} textAnchor="end" fontSize={11} fill={DAY.textFaint}>
+            {v}
+          </text>
+        </g>
+      ))}
+      <polyline
+        fill="none"
+        stroke={DAY.textDim}
+        strokeWidth={2.5}
+        points={curve.map((p) => `${x(p.hour)},${y(p.density)}`).join(" ")}
+      />
+      {curve.map((p) => (
+        <g key={p.hour}>
+          <circle
+            cx={x(p.hour)}
+            cy={y(p.density)}
+            r={p.hour === focusHour ? 7 : 4.5}
+            fill={p.severity === 3 ? "#E5254A" : DAY.surface}
+            stroke={p.severity === 3 ? "#E5254A" : DAY.textDim}
+            strokeWidth={2}
+          />
+          {p.hour % 2 === 1 && (
+            <text x={x(p.hour)} y={H - 6} textAnchor="middle" fontSize={11} fill={DAY.textFaint}>
+              {p.hour}
+            </text>
+          )}
+        </g>
+      ))}
+      {curve.some((p) => p.hour === markHour) && (
+        <line
+          x1={x(markHour)}
+          y1={6}
+          x2={x(markHour)}
+          y2={H - padB}
+          stroke={DAY.text}
+          strokeWidth={1.4}
+          strokeDasharray="3 3"
+        />
+      )}
+    </svg>
   );
 }
 
