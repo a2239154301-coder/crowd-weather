@@ -16,6 +16,7 @@ import { evidenceLabel } from "@/lib/forecast/evidence";
 import { applyDemand } from "@/lib/forecast/demand";
 import { timetableContext } from "@/lib/data/timetable";
 import { CAMERAS, latestFrames, cameraSeries } from "@/lib/data/camera";
+import { historyCurves } from "@/lib/data/history";
 import { simulateEgress, defaultEgress, regulatedEgress } from "@/lib/forecast/egress";
 import type { Dispatch, Report, Staff } from "@/lib/ops/store";
 
@@ -59,6 +60,32 @@ export default function AdjustConsole() {
   const posts = useMemo(() => postsFor(plan), [plan]);
   const nowMinutes = hour * 60;
 
+  // カメラの絶対値化に使う「現シナリオの予測」関数（時刻間は線形補間・時刻ごとにメモ）
+  const densityOf = useMemo(() => {
+    const cache = new Map<number, Map<string, number>>();
+    const byHour = (h: number) => {
+      let m = cache.get(h);
+      if (!m) {
+        m = new Map(
+          forecastZones(VENUE.zones, h, scenario).map((f) => [
+            f.zone.id,
+            applyDemand(f.zone, f.density, h),
+          ])
+        );
+        cache.set(h, m);
+      }
+      return m;
+    };
+    return (zoneId: string, hourFloat: number) => {
+      const h0 = Math.max(VENUE.open, Math.floor(hourFloat));
+      const h1 = Math.min(VENUE.close, h0 + 1);
+      const t = hourFloat - h0;
+      const d0 = byHour(h0).get(zoneId) ?? 0;
+      const d1 = byHour(h1).get(zoneId) ?? 0;
+      return d0 * (1 - t) + d1 * t;
+    };
+  }, [scenario]);
+
   // ── ポーリング（報告・スタッフ・指示） ──
   useEffect(() => {
     let alive = true;
@@ -87,7 +114,7 @@ export default function AdjustConsole() {
 
   // ── 観測の組み立て（カメラ=デモデータ・報告=store） ──
   const observations = useMemo<Observation[]>(() => {
-    const obs: Observation[] = latestFrames(nowMinutes).map((f) => ({
+    const obs: Observation[] = latestFrames(nowMinutes, densityOf).map((f) => ({
       zoneId: f.zoneId,
       minutes: f.minutes,
       impliedDensity: f.impliedDensity,
@@ -104,7 +131,7 @@ export default function AdjustConsole() {
       });
     }
     return obs;
-  }, [nowMinutes, reports]);
+  }, [nowMinutes, reports, densityOf]);
 
   // ── 予測と補正（決定的） ──
   const zones = VENUE.zones;
@@ -178,14 +205,26 @@ export default function AdjustConsole() {
     }
   }, [hour, corrected, staffList, reports]);
 
-  /** 承認 = このボタンだけが配信の入口（AIは提案まで） */
+  /** 承認 = このボタンだけが配信の入口（AIは提案まで）。連打による重複配信を防ぐ */
+  const [approving, setApproving] = useState<Proposal | null>(null);
   async function approve(p: Proposal) {
-    await fetch("/api/dispatch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...p }),
-    });
-    setProposals((prev) => (prev ? prev.filter((x) => x !== p) : prev));
+    if (approving) return;
+    setApproving(p);
+    try {
+      const res = await fetch("/api/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...p }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setProposalNote(`配信できませんでした: ${data?.error ?? res.status}`);
+        return;
+      }
+      setProposals((prev) => (prev ? prev.filter((x) => x !== p) : prev));
+    } finally {
+      setApproving(null);
+    }
   }
 
   const selZone = zoneById(zoneSel);
@@ -214,7 +253,7 @@ export default function AdjustConsole() {
         <section style={panel}>
           <h3 style={h3}>観測フィード</h3>
           <div style={{ fontSize: 11.5, color: DAY.textFaint, marginBottom: 6 }}>カメラ実測（デモデータ・5分間隔）</div>
-          {latestFrames(nowMinutes).map((f) => {
+          {latestFrames(nowMinutes, densityOf).map((f) => {
             const cam = CAMERAS.find((c) => c.id === f.cameraId)!;
             return (
               <div key={f.cameraId} style={{ display: "flex", gap: 8, fontSize: 13, padding: "4px 0", borderBottom: `1px solid ${DAY.line}` }}>
@@ -275,6 +314,7 @@ export default function AdjustConsole() {
               scenario={scenario}
               observations={observations}
               reports={reports}
+              densityOf={densityOf}
             />
           )}
         </section>
@@ -332,8 +372,8 @@ export default function AdjustConsole() {
               <div style={{ fontSize: 13, margin: "2px 0" }}>{p.action}</div>
               <div style={{ fontSize: 12, color: DAY.textFaint }}>{p.reason}</div>
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                <button onClick={() => approve(p)} style={{ flex: 1, minHeight: 44, borderRadius: 9, border: "none", background: DAY.text, color: "#FFF", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
-                  承認して配信
+                <button onClick={() => approve(p)} disabled={approving !== null} style={{ flex: 1, minHeight: 44, borderRadius: 9, border: "none", background: approving ? "#93A3C0" : DAY.text, color: "#FFF", fontWeight: 700, fontSize: 13.5, cursor: approving ? "wait" : "pointer" }}>
+                  {approving === p ? "配信中…" : "承認して配信"}
                 </button>
                 <button onClick={() => setProposals((prev) => (prev ? prev.filter((x) => x !== p) : prev))} style={{ flex: 1, minHeight: 44, borderRadius: 9, border: `1px solid ${DAY.line}`, background: "#FFF", fontSize: 13.5, cursor: "pointer" }}>
                   却下
@@ -429,6 +469,7 @@ function AnalysisChart({
   scenario,
   observations,
   reports,
+  densityOf,
 }: {
   zoneId: string;
   zoneName: string;
@@ -436,6 +477,7 @@ function AnalysisChart({
   scenario: ReturnType<typeof useScenario>["scenario"];
   observations: Observation[];
   reports: Report[];
+  densityOf: (zoneId: string, hourFloat: number) => number;
 }) {
   const zone = zoneById(zoneId)!;
   const W = 560;
@@ -465,9 +507,11 @@ function AnalysisChart({
     [predicted, observations, zoneId, hour]
   );
   const camPoints = useMemo(
-    () => cameraSeries(zoneId).filter((f) => f.minutes <= hour * 60 && f.minutes % 15 === 0),
-    [zoneId, hour]
+    () => cameraSeries(zoneId, densityOf).filter((f) => f.minutes <= hour * 60 && f.minutes % 15 === 0),
+    [zoneId, hour, densityOf]
   );
+  // 過去開催の実績（架空・シード固定）。「過去と重ねて分析」の実体
+  const history = useMemo(() => historyCurves(zoneId), [zoneId]);
   const reportPoints = reports.filter((r) => r.zoneId === zoneId && r.kind === "crowd");
 
   return (
@@ -481,6 +525,17 @@ function AnalysisChart({
             <line x1={padL} y1={y(v)} x2={W - 10} y2={y(v)} stroke={v === 75 ? "#E5254A" : DAY.line} strokeWidth={v === 75 ? 1.2 : 0.8} strokeDasharray={v === 75 ? "4 3" : undefined} />
             <text x={padL - 4} y={y(v) + 3.5} textAnchor="end" fontSize={9} fill={DAY.textFaint}>{v}</text>
           </g>
+        ))}
+        {/* 過去実績（薄い実線・デモデータ） */}
+        {history.map((hcurve, hi) => (
+          <polyline
+            key={hcurve.label}
+            fill="none"
+            stroke={hi === 0 ? "#7F77DD" : "#5DCAA5"}
+            strokeWidth={1.2}
+            opacity={0.55}
+            points={hcurve.values.map((v, i) => `${x(HOURS[i])},${y(v)}`).join(" ")}
+          />
         ))}
         {/* 予測（点線） */}
         <polyline fill="none" stroke={DAY.textDim} strokeWidth={1.8} strokeDasharray="5 4" points={predicted.map((p) => `${x(p.hour)},${y(p.v)}`).join(" ")} />
@@ -506,6 +561,9 @@ function AnalysisChart({
         <span style={{ color: "#185FA5" }}>● カメラ（デモ）</span>
         <span style={{ color: "#D85A30" }}>◆ スタッフ報告</span>
         <span style={{ color: DAY.danger }}>-- 危険帯75</span>
+        <span style={{ color: "#7F77DD" }}>— 2024実績</span>
+        <span style={{ color: "#5DCAA5" }}>— 2025実績</span>
+        <span style={{ color: DAY.textFaint }}>（過去実績・カメラはデモデータ）</span>
       </div>
     </div>
   );

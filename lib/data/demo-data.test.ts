@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { TIMETABLE, actAt, isIntermission, timetableContext } from "./timetable";
 import { demandFactors, applyDemand, hasOverlap } from "@/lib/forecast/demand";
 import { HISTORY, historyCurves } from "./history";
-import { CAMERAS, CAMERA_FRAMES, cameraSeries, latestFrames } from "./camera";
+import { CAMERAS, CAMERA_RATIO_FRAMES, cameraSeries, latestFrames } from "./camera";
 import { HOURS, VENUE, zonesFor } from "@/lib/forecast/venue";
 
 /**
@@ -87,34 +87,40 @@ describe("history — 過去実績（架空）", () => {
   });
 });
 
-describe("camera — 定点カメラ（架空）", () => {
+describe("camera — 定点カメラ（架空・比率ベース）", () => {
+  // テスト用の予測関数（一定値60）。絶対値化はこの予測×ratioで行われる
+  const flat60 = () => 60;
+
   it("4台・5分間隔・開場〜終演", () => {
     expect(CAMERAS).toHaveLength(4);
     const steps = (VENUE.close - VENUE.open) * 12 + 1;
-    expect(CAMERA_FRAMES).toHaveLength(steps * CAMERAS.length);
+    expect(CAMERA_RATIO_FRAMES).toHaveLength(steps * CAMERAS.length);
   });
 
   it("14:50の西ゲートに想定外の山がある（調整デモの筋書き）", () => {
-    // impliedDensityは100でクランプされるので、山の存在はクランプ前のcountで確認する
-    const wg = cameraSeries("wg");
-    const at = (hm: number) => wg.find((f) => f.minutes === hm)!.count;
-    const peak = at(14 * 60 + 50);
-    const before = at(13 * 60 + 50);
-    // ピークは1時間前より明確に高い（×1.55の注入）
-    expect(peak).toBeGreaterThan(before * 1.2);
-    // クランプ後も危険帯に届いている（観測として予報より高い値が出る）
-    const implied = wg.find((f) => f.minutes === 14 * 60 + 50)!.impliedDensity;
-    expect(implied).toBeGreaterThanOrEqual(90);
+    const at = (hm: number) =>
+      CAMERA_RATIO_FRAMES.find((f) => f.cameraId === "cam-wg" && f.minutes === hm)!.ratio;
+    // ピークの比率は×1.4以上（注入×1.55にノイズ±6%）。1時間前は≈1.0
+    expect(at(14 * 60 + 50)).toBeGreaterThan(1.4);
+    expect(at(13 * 60 + 50)).toBeGreaterThan(0.9);
+    expect(at(13 * 60 + 50)).toBeLessThan(1.1);
+  });
+
+  it("絶対値はそのときの予測に追随する（シナリオを変えても偽の食い違いが出ない）", () => {
+    // 同じフレームでも、予測が60なら観測≈60×ratio、予測が30なら≈30×ratio
+    const a = latestFrames(14 * 60, () => 60).find((f) => f.cameraId === "cam-main")!;
+    const b = latestFrames(14 * 60, () => 30).find((f) => f.cameraId === "cam-main")!;
+    expect(Math.abs(a.impliedDensity - 2 * b.impliedDensity)).toBeLessThanOrEqual(2);
   });
 
   it("latestFrames は指定時刻までの最新を台数分返す", () => {
-    const fs = latestFrames(15 * 60);
+    const fs = latestFrames(15 * 60, flat60);
     expect(fs).toHaveLength(4);
     for (const f of fs) expect(f.minutes).toBeLessThanOrEqual(15 * 60);
   });
 
   it("impliedDensity は0-100・countは非負", () => {
-    for (const f of CAMERA_FRAMES) {
+    for (const f of cameraSeries("wg", flat60)) {
       expect(f.impliedDensity).toBeGreaterThanOrEqual(0);
       expect(f.impliedDensity).toBeLessThanOrEqual(100);
       expect(f.count).toBeGreaterThanOrEqual(0);

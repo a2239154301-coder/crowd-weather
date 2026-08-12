@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   addDispatch,
   listDispatches,
+  listStaff,
   updateDispatch,
   type DispatchStatus,
 } from "@/lib/ops/store";
@@ -47,6 +48,16 @@ export async function POST(req: Request) {
   // ゾーンIDはenum相当の実在チェック（AI提案由来でも、ここが最終防衛線）
   if (!isValidZoneId(toZoneId)) {
     return NextResponse.json({ error: `unknown zoneId: ${toZoneId}` }, { status: 400 });
+  }
+  // 宛先スタッフの実在チェック（レビュー指摘 2026-08-13）。
+  // 受信箱は名前の完全一致でフィルタするため、表記ゆれの指示は「配信成功に見えて誰にも届かない」。
+  // AI提案のstaffNameが登録名とズレていたらここで400にし、承認者に見えるエラーで返す
+  const staff = await listStaff();
+  if (!staff.some((s) => s.name === staffName)) {
+    return NextResponse.json(
+      { error: `スタッフ「${staffName}」は入場していません（名前の表記を確認）` },
+      { status: 400 }
+    );
   }
 
   const dispatch = await addDispatch({
