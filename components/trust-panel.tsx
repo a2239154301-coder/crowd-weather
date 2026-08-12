@@ -20,8 +20,16 @@ import { PRICES, USD_JPY, estimateEventCost, formatYen } from "@/lib/ai/pricing"
 /**
  * PII Shield をダッシュボードで本番キーに適用し、マスクの実効を確認したら true にする。
  * 確認前に「適用済み」と書かない（実際に有効でないものを有効と書かない）。
+ *
+ * 2026-08-13 検証済み → true。本番キーで直接確認した内容:
+ *   - メール → [EMAIL]（標準の pii ルール）
+ *   - 日本の携帯番号 → [PHONE]（標準の phone 検出器は日本形式を素通しした実測を受け、
+ *     カスタム正規表現 `0[789]0[-\s]?\d{4}[-\s]?\d{4}` を追加。4形式で確認）
+ *   - 実アプリ経由（What-if・経路案内）でも構造化出力が壊れないことを確認
+ *   - ⚠ 固定電話・+81表記は対象外。**画像読解も対象外**（PII guardrailはテキストのみを
+ *     スキャンする — 公式docsに明記。会場資料PDFのPIIは守れない。表示文言もこの範囲に合わせる）
  */
-const PII_SHIELD_VERIFIED = false;
+const PII_SHIELD_VERIFIED = true;
 
 const TASK_LABEL: Record<OrcaTask, { label: string; freq: string }> = {
   ingest: { label: "① 会場資料の読解", freq: "会場ごと1回" },
@@ -184,8 +192,8 @@ export default function TrustPanel() {
           />
           {PII_SHIELD_VERIFIED && (
             <SecRow
-              title="② PII Shield — 個人情報は上流モデルに届く前にマスク"
-              body="OrcaRouterのGuardrailsをAPIキーに適用。メールアドレス等は [EMAIL] 型のタグに置換されてから上流に送られる。ポリシーはゲートウェイ側でキーに紐づくため、アプリのコード変更ゼロで全呼び出しに効く。"
+              title="② PII Shield — 自由文の個人情報は上流モデルに届く前にマスク"
+              body="OrcaRouterのGuardrails（PII Shield＋日本の携帯番号カスタム検出器）を本番キーに適用し、実測で確認済み（2026-08-13・メール4形式と携帯4形式）。What-if・経路案内の自由文にメールアドレスや携帯番号が混ざっても、[EMAIL] [PHONE] に置換されてから上流に送られる。ポリシーはゲートウェイ側でキーに紐づくため、アプリのコード変更ゼロで効く。限界も明記する: 検出はテキストのみで、画像で送る会場資料は対象外（実運用ではアップロード前の墨消しを手順に置く）。"
             />
           )}
           <SecRow
