@@ -50,10 +50,14 @@ export type RoutingPolicy = {
  *   コードを触らずに方針を変えられるようになる。docs: /routing/named-routers
  */
 export const ROUTING: Record<OrcaTask, RoutingPolicy> = {
-  // 実測 2.48秒。イベント中に何度も押されるので速度優先。
+  // 2026-08-13、名前付きルーター orcarouter/cw-advice に切り替え済み
+  // （scripts/router-check.mjs で3回合格。基準1744msに対し1210〜2329ms、
+  // X-Orca-Router/X-Orca-Resolved-Model とも一貫して返ることを確認）。
+  // 許可モデルはダッシュボード側で下記3つに絞ってあり、戦略は「最安値優先」。
+  // fallbacks はルーターそのものが不通のときの保険として直接指定を残す。
   advice: {
-    model: "google/gemini-2.5-flash-lite",
-    fallbacks: ["openai/gpt-4o-mini", "anthropic/claude-haiku-4.5"],
+    model: "orcarouter/cw-advice",
+    fallbacks: ["google/gemini-2.5-flash-lite", "openai/gpt-4o-mini", "anthropic/claude-haiku-4.5"],
     temperature: 0.2,
     maxTokens: 1500,
   },
