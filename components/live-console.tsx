@@ -18,6 +18,7 @@ import {
 } from "@/lib/forecast/risk";
 import type { Zone } from "@/lib/forecast/types";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
+import { evidenceLabel } from "@/lib/forecast/evidence";
 
 /**
  * 当日モード（LIVE）— 1画面・1判断。
@@ -492,6 +493,10 @@ function Why({
             {reason.lines.map((l, i) => (
               <li key={i}>{l}</li>
             ))}
+            <li>
+              物理的には {evidenceLabel(zone.kind, reason.density)}
+              （較正の根拠はデータ設計タブ）
+            </li>
           </ul>
           <p style={{ margin: "10px 0 0", fontSize: 13, color: DAY.textFaint, lineHeight: 1.7 }}>
             数字はすべて予報エンジンの計算。この根拠の作成にAIは使っていません。

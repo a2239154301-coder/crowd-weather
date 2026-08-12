@@ -11,6 +11,7 @@ import LiveConsole from "./live-console";
 import AdjustConsole from "./adjust-console";
 import StaffConsole from "./staff-console";
 import PlanOutput from "./plan-output";
+import EvidencePanel from "./evidence-panel";
 import { ScenarioProvider } from "@/lib/ui/scenario-context";
 import CompareBar from "./compare-bar";
 import TrustPanel from "./trust-panel";
@@ -257,7 +258,7 @@ export default function AppShell() {
             {view === "ops" && <OpsConsole />}
             {view === "output" && <PlanOutput />}
             {view === "ingest" && <IngestPanel />}
-            {view === "data" && <DataView />}
+            {view === "data" && (<><DataView /><EvidencePanel /></>)}
             {view === "trust" && <TrustPanel />}
           </>
         )}

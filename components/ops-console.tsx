@@ -9,6 +9,7 @@ import HourlyStrip from "./hourly-strip";
 import ZoneTimeline from "./zone-timeline";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
 import { TIME_BANDS, arrivalOrder, timeBand, zoneRisks, type ZoneRisk } from "@/lib/forecast/risk";
+import { evidenceLabel } from "@/lib/forecast/evidence";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
 import VenueMap, { type MapLayer, type StaffMark } from "./venue-map";
 import { useScenario } from "@/lib/ui/scenario-context";
@@ -1264,6 +1265,10 @@ function ArrivalList({ arrivals, hour }: { arrivals: ZoneRisk[]; hour: number })
             </span>
             <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600 }}>{r.zone.name}</span>
             <span style={{ fontSize: 13, color: INK.textDim }}>{r.dangerCause ?? "—"}</span>
+            {/* 物理的な意味の併記（evidence.ts の較正。「指数」を現場の言葉にする） */}
+            <span style={{ fontSize: 12, color: INK.textFaint, whiteSpace: "nowrap" }}>
+              {evidenceLabel(r.zone.kind, r.dangerDensity ?? r.density)}
+            </span>
             {/* 危険になる「その時刻」の予報値。いまの値ではない */}
             <span className="cw-mono" style={{ width: 118, textAlign: "right", fontSize: 13, color: INK.textDim }}>
               混{r.dangerDensity} / WBGT{r.dangerWbgt}

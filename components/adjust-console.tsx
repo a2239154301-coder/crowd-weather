@@ -16,6 +16,7 @@ import { evidenceLabel } from "@/lib/forecast/evidence";
 import { applyDemand } from "@/lib/forecast/demand";
 import { timetableContext } from "@/lib/data/timetable";
 import { CAMERAS, latestFrames, cameraSeries } from "@/lib/data/camera";
+import { simulateEgress, defaultEgress, regulatedEgress } from "@/lib/forecast/egress";
 import type { Dispatch, Report, Staff } from "@/lib/ops/store";
 
 /**
@@ -342,7 +343,78 @@ export default function AdjustConsole() {
           ))}
         </section>
       </div>
+
+      {/* ── 5. 退場シミュレーション（人流モデル・決定的） ── */}
+      <EgressPanel tickets={scenario.tickets} />
     </div>
+  );
+}
+
+/**
+ * 退場波及モデルのパネル — 「人がどう流れるか」の実体（D-2）。
+ * ゾーン隣接グラフ＋Fruin流動容量のネットワーク流で、一斉退場と規制退場を並べる。
+ * 雑踏警備の実務（規制退場の効果）が数字で見える。
+ */
+function EgressPanel({ tickets }: { tickets: number }) {
+  const [open, setOpen] = useState(false);
+  const result = useMemo(() => {
+    if (!open) return null;
+    const free = simulateEgress(defaultEgress(tickets));
+    const reg = simulateEgress(regulatedEgress(tickets));
+    return { free, reg };
+  }, [open, tickets]);
+
+  const NODE_LABEL: Record<string, string> = {
+    exit: "退場動線",
+    plaza: "駅前広場",
+    conc: "改札コンコース",
+  };
+
+  return (
+    <section style={{ ...panel }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <h3 style={{ ...h3, margin: 0 }}>退場シミュレーション（終演後の人の流れ）</h3>
+        <button
+          onClick={() => setOpen((v) => !v)}
+          style={{ minHeight: 44, padding: "0 16px", borderRadius: 9, border: `1px solid ${DAY.line}`, background: DAY.surface, fontSize: 13, fontWeight: 700, cursor: "pointer", color: DAY.text }}
+        >
+          {open ? "閉じる" : "計算する"}
+        </button>
+        <span style={{ fontSize: 11.5, color: DAY.textFaint }}>
+          ネットワーク流＋待ち行列（決定的計算・通路幅と流動係数60人/分/mは想定値）
+        </span>
+      </div>
+      {result && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 12, marginTop: 12 }}>
+          {(["exit", "plaza", "conc"] as const).map((node) => (
+            <div key={node} style={{ background: "#FFF", border: `1px solid ${DAY.line}`, borderRadius: 10, padding: "10px 12px" }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>{NODE_LABEL[node]}</div>
+              <table style={{ width: "100%", fontSize: 12.5, marginTop: 6, borderCollapse: "collapse" }}>
+                <tbody>
+                  <tr>
+                    <td style={{ color: DAY.textFaint, padding: "3px 0" }}>一斉退場</td>
+                    <td className="cw-mono" style={{ textAlign: "right" }}>
+                      ピーク{result.free.peak[node] ? Math.round(result.free.peak[node].value).toLocaleString() : "—"}人（終演+{result.free.peak[node]?.atMin ?? "—"}分）
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ color: DAY.textFaint, padding: "3px 0" }}>規制退場（3波・10分間隔）</td>
+                    <td className="cw-mono" style={{ textAlign: "right", color: "#0F6E56", fontWeight: 700 }}>
+                      ピーク{result.reg.peak[node] ? Math.round(result.reg.peak[node].value).toLocaleString() : "—"}人（終演+{result.reg.peak[node]?.atMin ?? "—"}分）
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ))}
+          <div style={{ gridColumn: "1 / -1", fontSize: 12.5, color: DAY.textDim, lineHeight: 1.7 }}>
+            滞留解消: 一斉 {result.free.clearMin}分 ／ 規制 {result.reg.clearMin}分。
+            規制退場は解消がやや遅れる代わりに、各所のピーク滞留が下がる（ピークが事故を起こす）。
+            ブロック別の規制退場は雑踏警備の標準実務 — その効果を数字で出せることが本モデルの主張。
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
