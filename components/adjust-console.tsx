@@ -1,28 +1,449 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DAY } from "@/lib/ui/day-theme";
+import { useScenario } from "@/lib/ui/scenario-context";
+import { dayPlan, forecastZones } from "@/lib/forecast/model";
+import { HOURS, VENUE, zonesFor } from "@/lib/forecast/venue";
+import { postsFor, ROLE_LABEL, zoneById, type Post } from "@/lib/ops/staffing";
+import {
+  fuseObservations,
+  correctionFactor,
+  correctedDensity,
+  type Observation,
+} from "@/lib/forecast/nowcast";
+import { evidenceLabel } from "@/lib/forecast/evidence";
+import { applyDemand } from "@/lib/forecast/demand";
+import { timetableContext } from "@/lib/data/timetable";
+import { CAMERAS, latestFrames, cameraSeries } from "@/lib/data/camera";
+import type { Dispatch, Report, Staff } from "@/lib/ops/store";
 
 /**
  * 調整コンソール — 計画と実際のAdjustmentを行う司令塔（当日モード「調整」ビュー）。
  *
- * B工程（スタッフ縦串）で実装する。ここは画面骨格のプレースホルダ。
- * 実装内容: 報告フィード／配置ボード（ポストコード・状態・手動補正）／
- * 計画vs実際の分析チャート／AI提案→承認→配信。
+ * 5つの部品で「観測 → 統合 → 補正 → 提案 → 承認・配信」のループを1画面に収める:
+ *  1. 観測フィード（スタッフ報告＋カメラ実測。デモデータは明記）
+ *  2. 分析チャート（予測 × カメラ × 報告 × 補正後 の重ね描き）
+ *  3. 配置ボード（ポスト×スタッフ状態。古い状態の明示・手動補正）
+ *  4. AI提案（/api/propose）→ 4'. 人間の承認 → /api/dispatch 配信
+ *
+ * 統合・補正は決定的（nowcast.ts）。LLMは報告の構造化と提案起草だけ（CLAUDE.md改訂ルール）。
  */
+
+const POLL_MS = 5000;
+
+type Proposal = {
+  staffName: string;
+  fromCode: string;
+  toZoneId: string;
+  action: string;
+  urgency: string;
+  reason: string;
+};
+
 export default function AdjustConsole() {
+  const { scenario } = useScenario();
+  const [hour, setHour] = useState(15);
+  const [zoneSel, setZoneSel] = useState("wg");
+
+  const [reports, setReports] = useState<Report[]>([]);
+  const [staffList, setStaffList] = useState<Staff[]>([]);
+  const [dispatches, setDispatches] = useState<Dispatch[]>([]);
+  const [proposals, setProposals] = useState<Proposal[] | null>(null);
+  const [proposalNote, setProposalNote] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMetaLine, setAiMetaLine] = useState("");
+
+  const plan = useMemo(() => dayPlan(scenario), [scenario]);
+  const posts = useMemo(() => postsFor(plan), [plan]);
+  const nowMinutes = hour * 60;
+
+  // ── ポーリング（報告・スタッフ・指示） ──
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      try {
+        const [r1, r2, r3] = await Promise.all([
+          fetch("/api/report").then((r) => r.json()),
+          fetch("/api/staff").then((r) => r.json()),
+          fetch("/api/dispatch").then((r) => r.json()),
+        ]);
+        if (!alive) return;
+        if (Array.isArray(r1.reports)) setReports(r1.reports);
+        if (Array.isArray(r2.staff)) setStaffList(r2.staff);
+        if (Array.isArray(r3.dispatches)) setDispatches(r3.dispatches);
+      } catch {
+        /* 次周期 */
+      }
+    };
+    tick();
+    const t = setInterval(tick, POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  // ── 観測の組み立て（カメラ=デモデータ・報告=store） ──
+  const observations = useMemo<Observation[]>(() => {
+    const obs: Observation[] = latestFrames(nowMinutes).map((f) => ({
+      zoneId: f.zoneId,
+      minutes: f.minutes,
+      impliedDensity: f.impliedDensity,
+      source: "camera" as const,
+    }));
+    // スタッフ報告: 1-5 → 指数換算（1→15 / 2→35 / 3→55 / 4→75 / 5→95）。crowd系のみ密度観測になる
+    for (const r of reports) {
+      if (r.kind !== "crowd") continue;
+      obs.push({
+        zoneId: r.zoneId,
+        minutes: nowMinutes, // 報告は「いま」の観測として扱う（デモは実時刻とシミュ時刻が混ざるため）
+        impliedDensity: 15 + (r.level - 1) * 20,
+        source: r.source,
+      });
+    }
+    return obs;
+  }, [nowMinutes, reports]);
+
+  // ── 予測と補正（決定的） ──
+  const zones = VENUE.zones;
+  const corrected = useMemo(() => {
+    const fc = forecastZones(zones, hour, scenario);
+    return fc.map((f) => {
+      const withDemand = applyDemand(f.zone, f.density, hour);
+      const fusion = fuseObservations(observations, f.zone.id, nowMinutes);
+      const age = fusion.latestMinutes === null ? Infinity : nowMinutes - fusion.latestMinutes;
+      const factor = correctionFactor(fusion.fusedDensity, withDemand, age === Infinity ? 999 : age);
+      return {
+        zone: f.zone,
+        predicted: withDemand,
+        observed: fusion.fusedDensity,
+        conflict: fusion.conflict,
+        correctedValue: correctedDensity(withDemand, factor),
+        factor,
+      };
+    });
+  }, [zones, hour, scenario, observations, nowMinutes]);
+
+  const bigGaps = corrected
+    .filter((c) => Math.abs(c.correctedValue - c.predicted) >= 10)
+    .sort((a, b) => Math.abs(b.correctedValue - b.predicted) - Math.abs(a.correctedValue - a.predicted));
+
+  // ── AI提案 ──
+  const askProposal = useCallback(async () => {
+    setAiBusy(true);
+    setProposals(null);
+    setProposalNote("");
+    const t0 = Date.now();
+    try {
+      const context = {
+        hour: `${hour}:00`,
+        timetable: timetableContext(hour),
+        risky: corrected
+          .filter((c) => c.correctedValue >= 60)
+          .map((c) => ({
+            zoneId: c.zone.id,
+            zone: c.zone.name,
+            予測: c.predicted,
+            補正後: c.correctedValue,
+            観測あり: c.observed !== null,
+            食い違い: c.conflict,
+          })),
+        現在配置: staffList.map((s) => ({
+          name: s.name,
+          post: s.postCode,
+          zone: zoneById(s.zoneId)?.name ?? s.zoneId,
+          role: ROLE_LABEL[s.role],
+          state: s.state,
+        })),
+        直近の報告: reports.slice(0, 6).map((r) => `${zoneById(r.zoneId)?.name}: ${r.summary}（${r.name}）`),
+      };
+      const res = await fetch("/api/propose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ context }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error);
+      setProposals(data.proposals ?? []);
+      setProposalNote(data.note ?? "");
+      const served = data.meta?.resolvedModel ?? data.meta?.servedModel ?? "";
+      setAiMetaLine(`${served} ／ ${((Date.now() - t0) / 1000).toFixed(1)}s${data.rejected ? ` ／ 範囲外提案${data.rejected}件を棄却` : ""}`);
+    } catch {
+      setProposalNote("提案を取得できませんでした");
+      setProposals([]);
+    } finally {
+      setAiBusy(false);
+    }
+  }, [hour, corrected, staffList, reports]);
+
+  /** 承認 = このボタンだけが配信の入口（AIは提案まで） */
+  async function approve(p: Proposal) {
+    await fetch("/api/dispatch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...p }),
+    });
+    setProposals((prev) => (prev ? prev.filter((x) => x !== p) : prev));
+  }
+
+  const selZone = zoneById(zoneSel);
+  const stale = (s: Staff) => Date.now() - s.updatedAt > 15 * 60_000;
+
   return (
-    <div
-      style={{
-        background: DAY.page,
-        color: DAY.textDim,
-        borderRadius: 16,
-        border: `1px solid ${DAY.line}`,
-        padding: 24,
-        fontSize: 14,
-        lineHeight: 1.8,
-      }}
-    >
-      調整コンソール（実装中）— スタッフ報告の受信・配置ボード・AI提案の承認と配信がここに入ります。
+    <div style={{ background: DAY.page, color: DAY.text, borderRadius: 16, border: `1px solid ${DAY.line}`, padding: 14, display: "grid", gap: 12 }}>
+      {/* 時刻コントロール */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: DAY.textDim }}>シミュレーション時刻</span>
+        <input
+          type="range"
+          min={VENUE.open}
+          max={VENUE.close}
+          value={hour}
+          onChange={(e) => setHour(+e.target.value)}
+          style={{ flex: 1, minWidth: 160 }}
+          aria-label="時刻"
+        />
+        <span className="cw-mono" style={{ fontSize: 22, fontWeight: 700, width: 70 }}>{hour}:00</span>
+        <span style={{ fontSize: 11.5, color: DAY.textFaint }}>カメラ・過去実績は（デモデータ）</span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
+        {/* ── 1. 観測フィード ── */}
+        <section style={panel}>
+          <h3 style={h3}>観測フィード</h3>
+          <div style={{ fontSize: 11.5, color: DAY.textFaint, marginBottom: 6 }}>カメラ実測（デモデータ・5分間隔）</div>
+          {latestFrames(nowMinutes).map((f) => {
+            const cam = CAMERAS.find((c) => c.id === f.cameraId)!;
+            return (
+              <div key={f.cameraId} style={{ display: "flex", gap: 8, fontSize: 13, padding: "4px 0", borderBottom: `1px solid ${DAY.line}` }}>
+                <span style={{ flex: 1 }}>{cam.name}</span>
+                <span className="cw-mono">{f.count}人</span>
+                <span className="cw-mono" style={{ color: DAY.textDim }}>指数{f.impliedDensity}</span>
+              </div>
+            );
+          })}
+          <div style={{ fontSize: 11.5, color: DAY.textFaint, margin: "10px 0 6px" }}>スタッフ報告（構造化済み）</div>
+          {reports.length === 0 && <div style={{ fontSize: 13, color: DAY.textDim }}>まだ報告はありません</div>}
+          {reports.slice(0, 6).map((r) => (
+            <div
+              key={r.id}
+              style={{
+                borderLeft: `4px solid ${r.level >= 4 ? "#E5254A" : r.level === 3 ? "#FB7A1E" : "#22C55E"}`,
+                background: "#F7F9FC",
+                borderRadius: "0 8px 8px 0",
+                padding: "6px 9px",
+                marginBottom: 6,
+                fontSize: 12.5,
+              }}
+            >
+              <b>{r.summary}</b>
+              <div style={{ color: DAY.textFaint, fontSize: 11.5 }}>
+                {r.name}・{new Date(r.at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+                {r.source === "staff-text" ? "・自由文→AI構造化" : ""}
+              </div>
+            </div>
+          ))}
+        </section>
+
+        {/* ── 2. 計画と実際のずれ ── */}
+        <section style={panel}>
+          <h3 style={h3}>計画と実際のずれ（ナウキャスト補正）</h3>
+          {bigGaps.length === 0 && (
+            <div style={{ fontSize: 13, color: DAY.textDim }}>予測と観測に大きなずれはありません（±10未満）</div>
+          )}
+          {bigGaps.slice(0, 5).map((c) => (
+            <button
+              key={c.zone.id}
+              onClick={() => setZoneSel(c.zone.id)}
+              style={{ display: "block", width: "100%", textAlign: "left", background: "#FFF", border: `1px solid ${DAY.line}`, borderRadius: 9, padding: "8px 10px", marginBottom: 6, cursor: "pointer" }}
+            >
+              <div style={{ fontSize: 13.5, fontWeight: 700 }}>
+                {c.zone.name} 予測{c.predicted} → <span style={{ color: c.correctedValue > c.predicted ? DAY.danger : "#0F6E56" }}>補正{c.correctedValue}</span>
+                {c.conflict && <span style={{ marginLeft: 6, fontSize: 11, color: DAY.danger }}>観測が食い違い→無線確認</span>}
+              </div>
+              <div style={{ fontSize: 11.5, color: DAY.textFaint }}>{evidenceLabel(c.zone.kind, c.correctedValue)}・クリックでチャート</div>
+            </button>
+          ))}
+          {/* 分析チャート */}
+          {selZone && (
+            <AnalysisChart
+              zoneId={zoneSel}
+              zoneName={selZone.name}
+              hour={hour}
+              scenario={scenario}
+              observations={observations}
+              reports={reports}
+            />
+          )}
+        </section>
+
+        {/* ── 3. 配置ボード ── */}
+        <section style={panel}>
+          <h3 style={h3}>配置ボード</h3>
+          <div style={{ fontSize: 11.5, color: DAY.textFaint, marginBottom: 6 }}>
+            申告の最終状態＋時刻。15分更新なしは「古い」。現実とズレたら無線で確認して指示で正す
+          </div>
+          {posts.map((p: Post) => {
+            const assigned = staffList.filter((s) => s.postCode.startsWith(p.code));
+            return (
+              <div key={p.code} style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 0", borderBottom: `1px solid ${DAY.line}`, fontSize: 13 }}>
+                <span className="cw-mono" style={{ width: 40, fontWeight: 700 }}>{p.code}</span>
+                <span style={{ flex: 1 }}>{p.zoneName}・{ROLE_LABEL[p.role]}</span>
+                {assigned.length === 0 ? (
+                  <span style={{ color: DAY.danger, fontWeight: 700, fontSize: 12 }}>空席</span>
+                ) : (
+                  assigned.map((s) => (
+                    <span key={s.name} style={{ fontSize: 12.5 }}>
+                      {s.name}
+                      <b style={{ marginLeft: 4, color: s.state === "onpost" ? "#0F6E56" : s.state === "moving" ? "#B45309" : DAY.danger }}>
+                        {s.state === "onpost" ? "着任" : s.state === "moving" ? "移動中" : "離脱"}
+                      </b>
+                      {stale(s) && <span style={{ color: DAY.danger, fontSize: 11 }}>（古い）</span>}
+                    </span>
+                  ))
+                )}
+              </div>
+            );
+          })}
+          {/* 未達の指示 */}
+          {dispatches.filter((d) => d.status === "sent" && Date.now() - d.createdAt > 10 * 60_000).map((d) => (
+            <div key={d.id} style={{ marginTop: 8, fontSize: 12.5, color: DAY.danger }}>
+              ⚠ {d.staffName}への指示（{d.toZoneName}）が10分以上未達 — 再送か無線確認を
+            </div>
+          ))}
+        </section>
+
+        {/* ── 4. AI提案 → 承認 → 配信 ── */}
+        <section style={{ ...panel, borderColor: DAY.text, borderWidth: 2 }}>
+          <h3 style={h3}>AI配置提案（承認するまで配信されない）</h3>
+          <button onClick={askProposal} disabled={aiBusy} style={{ width: "100%", minHeight: 52, borderRadius: 10, border: "none", background: aiBusy ? "#93A3C0" : DAY.text, color: "#FFF", fontSize: 15.5, fontWeight: 700, cursor: aiBusy ? "wait" : "pointer" }}>
+            {aiBusy ? "起草中…" : "観測と予報から提案を作る"}
+          </button>
+          {aiMetaLine && <div className="cw-mono" style={{ fontSize: 11, color: DAY.textFaint, marginTop: 4 }}>{aiMetaLine}</div>}
+          {proposalNote && <p style={{ margin: "8px 0 0", fontSize: 12.5, color: DAY.textDim }}>{proposalNote}</p>}
+          {proposals?.map((p, i) => (
+            <div key={i} style={{ background: "#FFF", border: `1px solid ${DAY.line}`, borderRadius: 10, padding: "10px 12px", marginTop: 8 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700 }}>
+                {p.fromCode} {p.staffName} → {zoneById(p.toZoneId)?.name ?? p.toZoneId}
+                {p.urgency === "now" && <span style={{ marginLeft: 6, color: DAY.danger, fontSize: 12 }}>いますぐ</span>}
+              </div>
+              <div style={{ fontSize: 13, margin: "2px 0" }}>{p.action}</div>
+              <div style={{ fontSize: 12, color: DAY.textFaint }}>{p.reason}</div>
+              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                <button onClick={() => approve(p)} style={{ flex: 1, minHeight: 44, borderRadius: 9, border: "none", background: DAY.text, color: "#FFF", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+                  承認して配信
+                </button>
+                <button onClick={() => setProposals((prev) => (prev ? prev.filter((x) => x !== p) : prev))} style={{ flex: 1, minHeight: 44, borderRadius: 9, border: `1px solid ${DAY.line}`, background: "#FFF", fontSize: 13.5, cursor: "pointer" }}>
+                  却下
+                </button>
+              </div>
+            </div>
+          ))}
+        </section>
+      </div>
     </div>
   );
 }
+
+/**
+ * 分析チャート — 予測カーブ × カメラ実測 × スタッフ報告 × 補正後 の重ね描き。
+ * 「重ねて状況を分析する」の実体。すべて決定的計算（ユーザー指摘 2026-08-13 のデータ統合ビュー）。
+ */
+function AnalysisChart({
+  zoneId,
+  zoneName,
+  hour,
+  scenario,
+  observations,
+  reports,
+}: {
+  zoneId: string;
+  zoneName: string;
+  hour: number;
+  scenario: ReturnType<typeof useScenario>["scenario"];
+  observations: Observation[];
+  reports: Report[];
+}) {
+  const zone = zoneById(zoneId)!;
+  const W = 560;
+  const H = 150;
+  const padL = 30;
+  const padB = 20;
+  const x = (h: number) => padL + ((h - HOURS[0]) / (HOURS[HOURS.length - 1] - HOURS[0])) * (W - padL - 10);
+  const y = (v: number) => H - padB - (v / 100) * (H - padB - 8);
+
+  const predicted = useMemo(
+    () =>
+      HOURS.map((h) => ({
+        hour: h,
+        v: applyDemand(zone, forecastZones([zone], h, scenario)[0].density, h),
+      })),
+    [zone, scenario]
+  );
+  const correctedCurve = useMemo(
+    () =>
+      predicted.map((p) => {
+        if (p.hour < hour) return { hour: p.hour, v: p.v };
+        const fusion = fuseObservations(observations, zoneId, hour * 60);
+        const age = fusion.latestMinutes === null ? 999 : hour * 60 - fusion.latestMinutes + (p.hour - hour) * 60;
+        const f = correctionFactor(fusion.fusedDensity, p.v, age);
+        return { hour: p.hour, v: correctedDensity(p.v, f) };
+      }),
+    [predicted, observations, zoneId, hour]
+  );
+  const camPoints = useMemo(
+    () => cameraSeries(zoneId).filter((f) => f.minutes <= hour * 60 && f.minutes % 15 === 0),
+    [zoneId, hour]
+  );
+  const reportPoints = reports.filter((r) => r.zoneId === zoneId && r.kind === "crowd");
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>
+        {zoneName} — 予測 × 実測 × 補正（{evidenceLabel(zone.kind, correctedCurve.find((c) => c.hour === hour)?.v ?? 0)}）
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", background: "#FFF", borderRadius: 8, border: `1px solid ${DAY.line}` }} role="img" aria-label={`${zoneName}の予測と実測の時系列`}>
+        {[0, 50, 75, 100].map((v) => (
+          <g key={v}>
+            <line x1={padL} y1={y(v)} x2={W - 10} y2={y(v)} stroke={v === 75 ? "#E5254A" : DAY.line} strokeWidth={v === 75 ? 1.2 : 0.8} strokeDasharray={v === 75 ? "4 3" : undefined} />
+            <text x={padL - 4} y={y(v) + 3.5} textAnchor="end" fontSize={9} fill={DAY.textFaint}>{v}</text>
+          </g>
+        ))}
+        {/* 予測（点線） */}
+        <polyline fill="none" stroke={DAY.textDim} strokeWidth={1.8} strokeDasharray="5 4" points={predicted.map((p) => `${x(p.hour)},${y(p.v)}`).join(" ")} />
+        {/* 補正後（実線） */}
+        <polyline fill="none" stroke={DAY.text} strokeWidth={2.4} points={correctedCurve.map((p) => `${x(p.hour)},${y(p.v)}`).join(" ")} />
+        {/* カメラ実測（点） */}
+        {camPoints.map((f) => (
+          <circle key={f.minutes} cx={x(f.minutes / 60)} cy={y(f.impliedDensity)} r={2.6} fill="#185FA5" />
+        ))}
+        {/* スタッフ報告（菱形） */}
+        {reportPoints.map((r) => (
+          <rect key={r.id} x={x(hour) - 4} y={y(15 + (r.level - 1) * 20) - 4} width={8} height={8} transform={`rotate(45 ${x(hour)} ${y(15 + (r.level - 1) * 20)})`} fill="#D85A30" />
+        ))}
+        {/* 現在時刻 */}
+        <line x1={x(hour)} y1={6} x2={x(hour)} y2={H - padB} stroke={DAY.text} strokeWidth={1.2} strokeDasharray="3 3" />
+        {HOURS.filter((h) => h % 2 === 1).map((h) => (
+          <text key={h} x={x(h)} y={H - 6} textAnchor="middle" fontSize={9} fill={DAY.textFaint}>{h}</text>
+        ))}
+      </svg>
+      <div style={{ display: "flex", gap: 12, fontSize: 11, color: DAY.textDim, marginTop: 4, flexWrap: "wrap" }}>
+        <span>— 補正後</span>
+        <span style={{ color: DAY.textFaint }}>-- 予測</span>
+        <span style={{ color: "#185FA5" }}>● カメラ（デモ）</span>
+        <span style={{ color: "#D85A30" }}>◆ スタッフ報告</span>
+        <span style={{ color: DAY.danger }}>-- 危険帯75</span>
+      </div>
+    </div>
+  );
+}
+
+const panel: React.CSSProperties = {
+  background: DAY.surface,
+  border: `1px solid ${DAY.line}`,
+  borderRadius: 12,
+  padding: "12px 14px",
+};
+
+const h3: React.CSSProperties = { margin: "0 0 8px", fontSize: 14, fontWeight: 700 };
