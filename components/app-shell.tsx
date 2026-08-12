@@ -7,6 +7,7 @@ import { DEFAULT_SCENARIO } from "@/lib/forecast/venue";
 import OpsConsole from "./ops-console";
 import IngestPanel from "./ingest-panel";
 import VisitorRoute from "./visitor-route";
+import LiveConsole from "./live-console";
 import CompareBar from "./compare-bar";
 import { VisitorApp, DataView } from "./crowd-weather";
 import { dayPlan } from "@/lib/forecast/model";
@@ -15,12 +16,17 @@ import { dayPlan } from "@/lib/forecast/model";
  * 画面の骨格。2026-08-11 に情報設計を再編（馬場氏要望1）:
  *
  * 従来はフラットな4タブで「誰のための画面か」が読めなかった。
- * 最上位を **使う人（主催者／来場者）** で分け、主催者側は
+ * 最上位を **使う人** で分け、主催者側は
  * 「読み込む → 条件 → 予報 → 出力」の作業手順をステッパーで示す。
  * 番号は飾りではなく実際の作業順序（このワークフロー自体が製品の主張）。
+ *
+ * 2026-08-12、最上位を **フェーズ**（準備／当日／来場者）に割り直した。
+ * 従来は「準備フェーズ」だけに最適化されていて、いちばん価値が高い
+ * 当日の画面が存在しなかった。予報プロダクトの本番は当日の炎天下の現場であって、
+ * 事務所のPCではない。
  */
 
-type Mode = "organizer" | "visitor";
+type Mode = "plan" | "live" | "visitor";
 type OrganizerView = "ops" | "ingest" | "data";
 
 const ORGANIZER_TABS: [OrganizerView, string][] = [
@@ -38,7 +44,7 @@ const STEPS: { n: number; label: string; hint: string; goto?: OrganizerView }[] 
 ];
 
 export default function AppShell() {
-  const [mode, setMode] = useState<Mode>("organizer");
+  const [mode, setMode] = useState<Mode>("plan");
   const [view, setView] = useState<OrganizerView>("ops");
 
   // 来場者アプリは移植前のモックのまま。新しい予報モデルの結果を、
@@ -92,7 +98,7 @@ export default function AppShell() {
           {/* 最上位: 誰のための画面か */}
           <div
             role="tablist"
-            aria-label="利用者の切り替え"
+            aria-label="フェーズの切り替え"
             style={{
               marginLeft: "auto",
               display: "flex",
@@ -105,7 +111,8 @@ export default function AppShell() {
           >
             {(
               [
-                ["organizer", "主催者・警備", "予報を作り、配置と文書を出す"],
+                ["plan", "準備する", "会場を作り、条件を振り、計画書を出す"],
+                ["live", "当日を回す", "いまどこが危ないか・何をするか"],
                 ["visitor", "来場者", "スマホで見る安全情報"],
               ] as [Mode, string, string][]
             ).map(([k, label, hint]) => (
@@ -135,7 +142,7 @@ export default function AppShell() {
           </div>
         </header>
 
-        {mode === "organizer" && (
+        {mode === "plan" && (
           <>
             {/* 作業手順ステッパー + サブタブ */}
             <div
@@ -239,6 +246,23 @@ export default function AppShell() {
             {view === "ops" && <OpsConsole />}
             {view === "ingest" && <IngestPanel />}
             {view === "data" && <DataView />}
+          </>
+        )}
+
+        {mode === "live" && (
+          <>
+            <p
+              style={{
+                margin: "0 0 14px",
+                fontSize: 12.5,
+                color: INK.textDim,
+                lineHeight: 1.8,
+              }}
+            >
+              当日、本部テントで見る画面。スクロールさせない・3秒で読める・片手で押せる。
+              直射日光の下では暗色画面がいちばん読めないので、ここだけ明色にしてある。
+            </p>
+            <LiveConsole />
           </>
         )}
 

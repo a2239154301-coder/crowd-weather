@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import HeatmapConsole from "@/components/heatmap-console";
 
 export const metadata: Metadata = {
-  title: "ヒートマップ試作｜CROWD WEATHER",
-  description: "日時・緯度経度・気温・湿度・雲量・風から、会場の暑さ指数を格子単位で計算する試作",
+  title: "会場図（全画面）｜CROWD WEATHER",
+  description: "予報コンソールと同じ条件で、リスク予報（危険までの残り時間）と暑さ指数の連続場を全画面で表示する",
 };
 
 export default function HeatmapPage() {

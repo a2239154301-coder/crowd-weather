@@ -8,6 +8,7 @@ import { fetchLiveWeather, geocode } from "@/lib/weather/open-meteo";
 import HourlyStrip from "./hourly-strip";
 import ZoneTimeline from "./zone-timeline";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
+import { TIME_BANDS, arrivalOrder, timeBand, zoneRisks, type ZoneRisk } from "@/lib/forecast/risk";
 import VenueMap, { type MapLayer, type StaffMark } from "./venue-map";
 import SecurityPlan from "./security-plan";
 
@@ -25,7 +26,7 @@ export default function OpsConsole() {
   const [scenario, setScenario] = useState<Scenario>(DEFAULT_SCENARIO);
   const [hour, setHour] = useState(15);
   const [scope, setScope] = useState<"in" | "out">("in");
-  const [layer, setLayer] = useState<MapLayer>("crowd");
+  const [layer, setLayer] = useState<MapLayer>("risk");
   const [planOpen, setPlanOpen] = useState(false);
 
   // Open-Meteo 実況（LIVE）。null=手入力のまま / "HH:MM"=実況反映済み / "error"
@@ -90,9 +91,23 @@ export default function OpsConsole() {
   const [aiBusy, setAiBusy] = useState(false);
   const [easyStyle, setEasyStyle] = useState(false);
 
-  const zones = useMemo(() => zonesFor(scope), [scope]);
+  // リスク予報は会場内外をまとめて出す。危険は終演時に
+  // 退場動線 → 駅前広場 → 改札 → ホーム と境界をまたいで移るので、分けると話が切れる。
+  // 画面・統計・AIへ渡す予報は、すべてこの zones に揃える
+  const zones = useMemo(
+    () => (layer === "risk" ? VENUE.zones : zonesFor(scope)),
+    [layer, scope]
+  );
+  const scopeLabel = layer === "risk" ? "会場内＋会場外" : scope === "in" ? "会場内" : "会場外";
+
   const plan = useMemo(() => dayPlan(scenario), [scenario]);
   const now = useMemo(() => hourPeak(zones, hour, scenario), [zones, hour, scenario]);
+
+  const risks = useMemo(
+    () => (layer === "risk" ? zoneRisks(zones, hour, scenario) : null),
+    [layer, zones, hour, scenario]
+  );
+  const arrivals = useMemo(() => (risks ? arrivalOrder(risks) : []), [risks]);
 
   const dayBand = densityBand(plan.peakDensity);
   const heatBand = wbgtBand(plan.peakWbgt);
@@ -117,7 +132,7 @@ export default function OpsConsole() {
     return {
       venue: VENUE.name,
       hour,
-      scope: scope === "in" ? "会場内" : "会場外",
+      scope: scopeLabel,
       weather: WEATHER_LABEL[scenario.weather],
       temp: scenario.temp,
       humidity: scenario.rhPct,
@@ -328,7 +343,7 @@ export default function OpsConsole() {
         scenario={scenario}
         hour={hour}
         onHourChange={setHour}
-        scopeLabel={scope === "in" ? "会場内" : "会場外"}
+        scopeLabel={scopeLabel}
       />
 
       <div className="cw-split" style={{ display: "grid", gridTemplateColumns: "312px minmax(0,1fr)", gap: 14 }}>
@@ -560,16 +575,32 @@ export default function OpsConsole() {
         {/* ── 会場図 ──────────────────────────────── */}
         <section style={{ display: "grid", gap: 12, alignContent: "start" }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {layer === "risk" ? (
+              <span
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: INK.textDim,
+                  border: `1px solid ${INK.line}`,
+                  borderRadius: 9,
+                  padding: "9px 13px",
+                }}
+              >
+                会場内＋会場外
+              </span>
+            ) : (
+              <Toggle
+                options={[
+                  ["in", "会場内"],
+                  ["out", "会場外"],
+                ]}
+                value={scope}
+                onChange={(v) => setScope(v as "in" | "out")}
+              />
+            )}
             <Toggle
               options={[
-                ["in", "会場内"],
-                ["out", "会場外"],
-              ]}
-              value={scope}
-              onChange={(v) => setScope(v as "in" | "out")}
-            />
-            <Toggle
-              options={[
+                ["risk", "リスク予報"],
                 ["crowd", "混雑"],
                 ["heat", "暑熱・日陰"],
               ]}
@@ -580,6 +611,29 @@ export default function OpsConsole() {
           </div>
 
           <VenueMap zones={zones} hour={hour} scenario={scenario} layer={layer} />
+
+          {layer === "risk" && (
+            <>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 12.5,
+                  lineHeight: 1.8,
+                  color: INK.textDim,
+                  background: INK.raised,
+                  border: `1px solid ${INK.line}`,
+                  borderRadius: 10,
+                  padding: "11px 13px",
+                }}
+              >
+                色は<b style={{ color: INK.text }}>いまの値ではなく、危険帯に入るまでの残り時間</b>。
+                判定は混雑が主で、WBGTが31℃以上のとき段を1つ上げる。
+                既存サービスが出せるのは「いま混んでいる場所」まで —
+                ここで出しているのは<b style={{ color: INK.text }}>これから危なくなる場所</b>。
+              </p>
+              <ArrivalList arrivals={arrivals} hour={hour} />
+            </>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
             <Stat
@@ -597,7 +651,7 @@ export default function OpsConsole() {
             <Stat
               label="日陰カバー率"
               value={`${now.shadeRate}%`}
-              sub={scope === "in" ? "会場内ゾーン" : "会場外ゾーン"}
+              sub={`${scopeLabel}ゾーン`}
               color="#7DD3FC"
             />
           </div>
@@ -1179,7 +1233,9 @@ function Legend({ layer }: { layer: MapLayer }) {
   const bands =
     layer === "crowd"
       ? [densityBand(10), densityBand(35), densityBand(60), densityBand(90)]
-      : [wbgtBand(23), wbgtBand(26), wbgtBand(29), wbgtBand(33)];
+      : layer === "heat"
+        ? [wbgtBand(23), wbgtBand(26), wbgtBand(29), wbgtBand(33)]
+        : [...TIME_BANDS].reverse();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto", flexWrap: "wrap" }}>
       {bands.map((b) => (
@@ -1188,6 +1244,63 @@ function Legend({ layer }: { layer: MapLayer }) {
           {b.label}
         </span>
       ))}
+    </div>
+  );
+}
+
+/**
+ * 危険の到来順。「これから危なくなる場所」を時刻順に並べた表。
+ * 地図が空間、この表が時間。2つで「いつ・どこが」が揃う。
+ */
+function ArrivalList({ arrivals, hour }: { arrivals: ZoneRisk[]; hour: number }) {
+  if (arrivals.length === 0) {
+    return (
+      <div
+        style={{
+          background: INK.surface,
+          border: `1px solid ${INK.line}`,
+          borderRadius: 12,
+          padding: "14px 16px",
+          fontSize: 13,
+          color: INK.textDim,
+        }}
+      >
+        {hour}:00 以降、終演まで危険帯に達するゾーンはありません。
+      </div>
+    );
+  }
+  return (
+    <div style={{ background: INK.surface, border: `1px solid ${INK.line}`, borderRadius: 12, padding: "13px 16px" }}>
+      <div style={{ fontSize: 11, letterSpacing: 1, color: INK.textFaint, marginBottom: 4 }}>
+        危険の到来順（{hour}:00 以降）
+      </div>
+      {arrivals.map((r) => {
+        const band = timeBand(r.hoursToDanger);
+        const now = r.hoursToDanger === 0;
+        return (
+          <div
+            key={r.zone.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 11,
+              minHeight: 44,
+              borderBottom: `1px solid ${INK.hairline}`,
+            }}
+          >
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: band.color, flex: "none" }} />
+            <span className="cw-mono" style={{ width: 54, fontSize: 13.5, color: now ? band.color : INK.text, fontWeight: 600 }}>
+              {now ? "いま" : `${r.dangerHour}:00`}
+            </span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600 }}>{r.zone.name}</span>
+            <span style={{ fontSize: 13, color: INK.textDim }}>{r.dangerCause ?? "—"}</span>
+            {/* 危険になる「その時刻」の予報値。いまの値ではない */}
+            <span className="cw-mono" style={{ width: 118, textAlign: "right", fontSize: 13, color: INK.textDim }}>
+              混{r.dangerDensity} / WBGT{r.dangerWbgt}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

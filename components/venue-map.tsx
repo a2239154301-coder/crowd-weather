@@ -5,17 +5,68 @@ import type { Point, Scenario, Zone } from "@/lib/forecast/types";
 import { VENUE } from "@/lib/forecast/venue";
 import { centroid, forecastZones, shadowsAt, sunAt, toPath } from "@/lib/forecast/model";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
+import { riskLabel, timeBand, zoneRisks, type ZoneRisk } from "@/lib/forecast/risk";
 
-export type MapLayer = "crowd" | "heat";
+/**
+ * `risk` = 総合リスク予報（2026-08-12 追加）。色が「いまの値」ではなく
+ * 「危険帯に入るまでの残り時間」を表す。crowd / heat の挙動は変えていない。
+ */
+export type MapLayer = "crowd" | "heat" | "risk";
 
 export type StaffMark = { at: Point; role: "water" | "guide" | "aid"; label: string };
 
+/**
+ * 地面と建物の明度（2026-08-12 引き上げ）。
+ *
+ * 「元のステージ等が見えなさ過ぎて何を表しているのか分からない」への対応。
+ * 従来は暗い背景に建物 #0D1420（ほぼ黒）を置いていたため、会場図として読めなかった。
+ * 会場が読めることが先で、予報はその上のオーバーレイという順序にする。
+ */
 const GROUND_FILL: Record<string, string> = {
-  water: "#0E2136",
-  grass: "#13251F",
-  paved: "#151C2B",
-  deck: "#1A1E2C",
+  water: "#14344E",
+  grass: "#1C3A2C",
+  paved: "#222C42",
+  deck: "#262A3B",
 };
+
+const BUILDING_FILL = "#33415C";
+const BUILDING_STROKE = "#6E86B2";
+
+/**
+ * ラベルの逃がし位置。**`venue.ts` の `Zone.label` には足さないこと** —
+ * あちらは `route.ts` の `anchorOf()` が経路探索の起点に使っており、
+ * 動かすと `route.test.ts` の固定値が壊れる。表示の都合はここで吸収する。
+ */
+const LABEL_NUDGE: Record<string, Point> = {
+  // 駅連絡通路と駅前広場は実際に重なっている。左右に振り分ける
+  corr: { x: 500, y: 104 },
+  plaza: { x: 368, y: 118 },
+  // 駅ビルの中の細長い2ゾーン
+  plat: { x: 500, y: 30 },
+  conc: { x: 500, y: 60 },
+  // 右上は方位コンパスの定位置。重心のままだと "S" とぶつかるので左へ寄せる
+  blvd: { x: 818, y: 112 },
+};
+
+/** 縦に細いゾーンは名前と状態を1行にまとめる（2行だと枠からはみ出す） */
+const THIN_ZONE = 52;
+
+function bboxHeight(shape: Point[]): number {
+  const ys = shape.map((p) => p.y);
+  return Math.max(...ys) - Math.min(...ys);
+}
+
+function inPolygon(p: Point, poly: Point[]): boolean {
+  let hit = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i];
+    const b = poly[j];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+      hit = !hit;
+    }
+  }
+  return hit;
+}
 
 const ROLE_COLOR: Record<StaffMark["role"], string> = {
   water: "#38BDF8",
@@ -51,11 +102,35 @@ export default function VenueMap({
     () => shadowsAt(hour, scenario.date, scenario.geo),
     [hour, scenario.date, scenario.geo]
   );
-  const forecast = useMemo(() => forecastZones(zones, hour, scenario), [zones, hour, scenario]);
+  const plain = useMemo(() => forecastZones(zones, hour, scenario), [zones, hour, scenario]);
+  // リスク層は hour 以降の全時刻を走査するので、そのレイヤーのときだけ計算する
+  const risks = useMemo(
+    () => (layer === "risk" ? zoneRisks(zones, hour, scenario) : null),
+    [layer, zones, hour, scenario]
+  );
+  const forecast = risks ?? plain;
   const sun = sunAt(hour, scenario.date, scenario.geo);
   const night = sun.altitudeDeg <= 3;
 
   const active = forecast.find((f) => f.zone.id === hovered) ?? null;
+  const activeRisk = risks?.find((r) => r.zone.id === hovered) ?? null;
+
+  /**
+   * 建物名は、ゾーンと重なっていない建物にだけ出す。
+   * 駅ビルのようにゾーンを内包する建物へ名前を置くと、
+   * ホーム・改札のラベルの隙間に割り込んで3行が重なる。
+   */
+  const buildingLabels = useMemo(() => {
+    if (compact) return [];
+    return VENUE.buildings
+      .map((b) => ({ b, c: centroid(b.shape) }))
+      .filter(
+        ({ b, c }) =>
+          !zones.some((z) => inPolygon(c, z.shape) || inPolygon(centroid(z.shape), b.shape))
+      );
+  }, [zones, compact]);
+
+  const layerName = layer === "crowd" ? "混雑" : layer === "heat" ? "暑熱" : "リスク";
 
   return (
     <div style={{ position: "relative", width: "100%" }}>
@@ -72,7 +147,7 @@ export default function VenueMap({
           transition: "background 600ms ease",
         }}
         role="img"
-        aria-label={`${VENUE.name} の ${hour}時の${layer === "crowd" ? "混雑" : "暑熱"}予報`}
+        aria-label={`${VENUE.name} の ${hour}時の${layerName}予報`}
       >
         <defs>
           {/* 危険域には45°のハッチを重ねる。色だけに意味を持たせないため */}
@@ -101,20 +176,43 @@ export default function VenueMap({
           <path
             key={b.id}
             d={toPath(b.shape)}
-            fill="#0D1420"
-            stroke="#2B3A55"
+            fill={BUILDING_FILL}
+            stroke={BUILDING_STROKE}
             strokeWidth={1.2}
           />
+        ))}
+        {buildingLabels.map(({ b, c }) => (
+          <text
+            key={b.id}
+            x={c.x}
+            y={c.y + 4}
+            textAnchor="middle"
+            fontSize={13}
+            fill={INK.textDim}
+            stroke={INK.page}
+            strokeWidth={3}
+            paintOrder="stroke"
+            style={{ pointerEvents: "none" }}
+          >
+            {b.name}
+          </text>
         ))}
 
         {/* 4. ゾーン */}
         {forecast.map((f) => {
-          const band = layer === "crowd" ? densityBand(f.density) : wbgtBand(f.wbgt);
+          const risk = risks ? (f as ZoneRisk) : null;
+          const band =
+            layer === "crowd"
+              ? densityBand(f.density)
+              : layer === "heat"
+                ? wbgtBand(f.wbgt)
+                : timeBand(risk!.hoursToDanger);
           const value = layer === "crowd" ? f.density : f.wbgt;
           const dimmed = emphasizeShade && !f.shaded;
           const critical = band.severity === 3;
-          const c = f.zone.label ?? centroid(f.zone.shape);
+          const c = LABEL_NUDGE[f.zone.id] ?? f.zone.label ?? centroid(f.zone.shape);
           const isHover = hovered === f.zone.id;
+          const thin = bboxHeight(f.zone.shape) < THIN_ZONE;
           return (
             <g
               key={f.zone.id}
@@ -135,7 +233,26 @@ export default function VenueMap({
                 style={{ transition: "fill 450ms ease, fill-opacity 200ms ease, stroke-width 120ms ease" }}
               />
               {critical && !dimmed && <path d={toPath(f.zone.shape)} fill="url(#cw-hatch)" />}
-              {!compact && (
+              {!compact && thin && (
+                /* 細長いゾーンは2行だと枠からはみ出すので1行にまとめる */
+                <text
+                  x={c.x}
+                  y={c.y + 5}
+                  textAnchor="middle"
+                  fontSize={13}
+                  fill={INK.text}
+                  stroke={INK.page}
+                  strokeWidth={3.5}
+                  paintOrder="stroke"
+                  style={{ pointerEvents: "none", fontWeight: 500 }}
+                >
+                  {f.zone.name}{" "}
+                  <tspan fill={band.color} className="cw-mono">
+                    {risk ? riskLabel(risk) : `${value} ${band.label}`}
+                  </tspan>
+                </text>
+              )}
+              {!compact && !thin && (
                 <>
                   <text
                     x={c.x}
@@ -143,25 +260,48 @@ export default function VenueMap({
                     textAnchor="middle"
                     fontSize={13}
                     fill={INK.text}
+                    stroke={INK.page}
+                    strokeWidth={3.5}
+                    paintOrder="stroke"
                     style={{ pointerEvents: "none", fontWeight: 500 }}
                   >
                     {f.zone.name}
                   </text>
-                  <text
-                    x={c.x}
-                    y={c.y + 15}
-                    textAnchor="middle"
-                    fontSize={15}
-                    fill={band.color}
-                    className="cw-mono"
-                    style={{ pointerEvents: "none", fontWeight: 600 }}
-                  >
-                    {value}
-                    <tspan fontSize={10} fill={INK.textDim} className="cw-mono">
-                      {" "}
-                      {band.label}
-                    </tspan>
-                  </text>
+                  {risk ? (
+                    <text
+                      x={c.x}
+                      y={c.y + 16}
+                      textAnchor="middle"
+                      fontSize={14}
+                      fill={band.color}
+                      className="cw-mono"
+                      stroke={INK.page}
+                      strokeWidth={3.5}
+                      paintOrder="stroke"
+                      style={{ pointerEvents: "none", fontWeight: 600 }}
+                    >
+                      {riskLabel(risk)}
+                    </text>
+                  ) : (
+                    <text
+                      x={c.x}
+                      y={c.y + 15}
+                      textAnchor="middle"
+                      fontSize={15}
+                      fill={band.color}
+                      className="cw-mono"
+                      stroke={INK.page}
+                      strokeWidth={3.5}
+                      paintOrder="stroke"
+                      style={{ pointerEvents: "none", fontWeight: 600 }}
+                    >
+                      {value}
+                      <tspan fontSize={13} fill={INK.textDim} className="cw-mono">
+                        {" "}
+                        {band.label}
+                      </tspan>
+                    </text>
+                  )}
                 </>
               )}
               {f.shaded && layer === "heat" && !compact && (
@@ -231,6 +371,14 @@ export default function VenueMap({
               band={wbgtBand(active.wbgt).label}
               color={wbgtBand(active.wbgt).color}
             />
+            {activeRisk && (
+              <Row
+                label="予報"
+                value={riskLabel(activeRisk)}
+                band={activeRisk.dangerCause ?? activeRisk.cause ?? "要因なし"}
+                color={timeBand(activeRisk.hoursToDanger).color}
+              />
+            )}
             <div style={{ color: INK.textDim, fontSize: 11 }}>
               {hour}:00 ／ {active.shaded ? "日陰" : "日なた"}
             </div>
