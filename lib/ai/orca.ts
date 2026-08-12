@@ -148,7 +148,13 @@ function isRetryable(status: number): boolean {
 }
 
 type ChatCompletion = {
-  choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+  choices?: Array<{
+    message?: {
+      content?: string;
+      tool_calls?: Array<{ function?: { name?: string; arguments?: string } }>;
+    };
+    finish_reason?: string;
+  }>;
   usage?: OrcaUsage;
   error?: { message?: string };
 };
@@ -163,6 +169,17 @@ export type OrcaExtras = {
   maxTokens?: number;
   /** タスク既定のタイムアウトを上書きする（Visionは60秒超えることがある） */
   timeoutMs?: number;
+  /**
+   * 単一tool強制呼び出し（2026-08-13追加）。指定するとOpenAI互換のtool callingで
+   * 呼び出し、モデルが返した function.arguments のJSON文字列を text として返す。
+   *
+   * なぜ response_format ではなく tool にするか（/api/propose で使用）:
+   * OrcaRouterの**Agent Firewallはtool呼び出しだけを管轄する**（content=Guardrails /
+   * tools=Firewall という公式の区分）。配置提案をtool callにすることで、
+   * ゲートウェイ側の args_match_json 検証（実在18ゾーン外へのdeny）が効くようになる
+   * ＝ JSON Schema（アプリ側）＋ Firewall（ゲートウェイ側）の二重防御。
+   */
+  tool?: { name: string; description?: string; parameters: unknown };
 };
 
 type ContentPart =
@@ -212,6 +229,21 @@ async function attempt(
               },
             }
           : {}),
+        ...(extras.tool
+          ? {
+              tools: [
+                {
+                  type: "function",
+                  function: {
+                    name: extras.tool.name,
+                    description: extras.tool.description,
+                    parameters: extras.tool.parameters,
+                  },
+                },
+              ],
+              tool_choice: { type: "function", function: { name: extras.tool.name } },
+            }
+          : {}),
       }),
     });
 
@@ -234,8 +266,18 @@ async function attempt(
       );
     }
 
+    // tool指定時は function.arguments（JSON文字列）を text として返す。
+    // Firewallにdenyされた場合は上のerrorチェック（!res.ok）で OrcaError になる
+    const message = data.choices?.[0]?.message;
+    const toolArgs = extras.tool ? message?.tool_calls?.[0]?.function?.arguments : undefined;
+    if (extras.tool && !toolArgs) {
+      throw new OrcaError(
+        `${model} がtool呼び出し（${extras.tool.name}）を返しませんでした`,
+        502
+      );
+    }
     return {
-      text: data.choices?.[0]?.message?.content ?? "",
+      text: toolArgs ?? message?.content ?? "",
       usage: data.usage ?? null,
       // X-Orca-* ヘッダ = どう振り分けられたかの根拠 (docs: /routing/response-headers)
       resolvedModel: res.headers.get("x-orca-resolved-model"),

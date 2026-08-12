@@ -10,10 +10,14 @@ import { VENUE } from "@/lib/forecast/venue";
  * 人間の承認ボタン → /api/dispatch だけが行う（Human-in-the-Loop。CLAUDE.md改訂ルール
  * 「AIの行動は人間承認付きの提案まで」）。
  *
- * 二重防御:
- *  1. JSON Schema の enum で提案先を実在18ゾーンに制限（このファイル）
+ * 三重防御（2026-08-13 tool call化で3層目が有効化可能に）:
+ *  1. tool parameters の enum で提案先を実在18ゾーンに制限（このファイル）
  *  2. サーバー側で isValidZoneId を再検証（enumをすり抜けた場合の最終防衛線）
- *  （3. OrcaRouter Agent Firewall による gateway 側の検証 = 時間があれば追加）
+ *  3. OrcaRouter Agent Firewall（gateway側）— 提案を response_format ではなく
+ *     **tool呼び出し（propose_dispatch）**にしたので、Firewallの管轄対象になった。
+ *     ダッシュボードで tool_name=propose_dispatch に args_match_json ルールを
+ *     置けば、アプリに届く前にゲートウェイが検証する。検証手順は
+ *     scripts/firewall-check.mjs（採否ゲート。合格を確認してから有効と表記する）
  */
 
 const ZONE_IDS = VENUE.zones.map((z) => z.id);
@@ -71,7 +75,14 @@ export async function POST(req: Request) {
       task: "advice",
       system: PROPOSAL_SYSTEM,
       user: `現在の状況:\n${JSON.stringify(body.context, null, 2)}`,
-      extras: { jsonSchema: { name: "dispatch_proposals", schema: PROPOSAL_SCHEMA } },
+      // tool呼び出し（response_formatではなく）。Firewallの管轄に入れるため — 上記コメント参照
+      extras: {
+        tool: {
+          name: "propose_dispatch",
+          description: "配置変更の提案を提出する（人間の承認後にのみ配信される）",
+          parameters: PROPOSAL_SCHEMA,
+        },
+      },
     });
     let parsed: {
       proposals?: {

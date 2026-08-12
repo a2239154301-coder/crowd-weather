@@ -52,6 +52,8 @@ export default function AdjustConsole() {
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [dispatches, setDispatches] = useState<Dispatch[]>([]);
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
+  // 写真ナウキャスト: 採用済みの写真観測（人間確認を経たものだけが観測に入る）
+  const [photoObs, setPhotoObs] = useState<Observation[]>([]);
   const [proposalNote, setProposalNote] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiMetaLine, setAiMetaLine] = useState("");
@@ -130,8 +132,10 @@ export default function AdjustConsole() {
         source: r.source,
       });
     }
+    // 写真観測（人間が「採用」したものだけ）
+    for (const p of photoObs) obs.push(p);
     return obs;
-  }, [nowMinutes, reports, densityOf]);
+  }, [nowMinutes, reports, densityOf, photoObs]);
 
   // ── 予測と補正（決定的） ──
   const zones = VENUE.zones;
@@ -284,6 +288,10 @@ export default function AdjustConsole() {
               </div>
             </div>
           ))}
+          <PhotoObsInput
+            nowMinutes={nowMinutes}
+            onAdopt={(o) => setPhotoObs((prev) => [...prev, o])}
+          />
         </section>
 
         {/* ── 2. 計画と実際のずれ ── */}
@@ -386,6 +394,145 @@ export default function AdjustConsole() {
 
       {/* ── 5. 退場シミュレーション（人流モデル・決定的） ── */}
       <EgressPanel tickets={scenario.tickets} />
+    </div>
+  );
+}
+
+/**
+ * 写真ナウキャスト — ゾーン写真をAIで1-5レベルに分類し、**人間が確認してから**観測に採用する。
+ *
+ * 人数カウントはしない（Vision LLMの群集カウントは高密度で精度が出ない=研究コンセンサス。
+ * /api/photo-obs 参照）。分類の確信度も表示し、採用の判断は人間に残す。
+ */
+function PhotoObsInput({
+  nowMinutes,
+  onAdopt,
+}: {
+  nowMinutes: number;
+  onAdopt: (o: Observation) => void;
+}) {
+  const [zoneSel, setZoneSel] = useState("wg");
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<{
+    level: number;
+    description: string;
+    confidence: string;
+    crowdVisible: boolean;
+  } | null>(null);
+  const [note, setNote] = useState("");
+
+  /** ingest-panel と同じ流儀: 長辺1024pxへ縮小してJPEG化してから送る */
+  async function toResizedDataUrl(file: File): Promise<string> {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = url;
+      });
+      const long = Math.max(img.width, img.height);
+      const scale = long > 1024 ? 1024 / long : 1;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.85);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  async function classify(file: File) {
+    setBusy(true);
+    setPending(null);
+    setNote("");
+    try {
+      const imageDataUrl = await toResizedDataUrl(file);
+      const res = await fetch("/api/photo-obs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageDataUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error);
+      if (!data.result.crowdVisible) {
+        setNote("群集が判定できない写真でした（無人・ブレ等）。別の写真をどうぞ");
+        return;
+      }
+      setPending(data.result);
+    } catch {
+      setNote("分類できませんでした（通信・APIキーを確認）");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 10, borderTop: `1px solid ${DAY.line}`, paddingTop: 8 }}>
+      <div style={{ fontSize: 11.5, color: DAY.textFaint, marginBottom: 6 }}>
+        写真ナウキャスト（AIは1-5分類まで・採用は人間）
+      </div>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <select
+          value={zoneSel}
+          onChange={(e) => setZoneSel(e.target.value)}
+          aria-label="写真のゾーン"
+          style={{ minHeight: 44, borderRadius: 9, border: `1px solid ${DAY.line}`, background: "#FFF", color: DAY.text, fontSize: 13, padding: "0 8px" }}
+        >
+          {VENUE.zones.map((z) => (
+            <option key={z.id} value={z.id}>{z.name}</option>
+          ))}
+        </select>
+        <label
+          style={{ display: "inline-flex", alignItems: "center", minHeight: 44, padding: "0 14px", borderRadius: 9, border: `1px solid ${DAY.line}`, background: "#FFF", fontSize: 13, fontWeight: 700, cursor: busy ? "wait" : "pointer" }}
+        >
+          {busy ? "分類中…" : "写真を選ぶ"}
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            disabled={busy}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) classify(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+      {note && <div style={{ fontSize: 12.5, color: DAY.textDim, marginTop: 6 }}>{note}</div>}
+      {pending && (
+        <div style={{ background: "#FFF", border: `1px solid ${DAY.line}`, borderRadius: 10, padding: "9px 11px", marginTop: 8 }}>
+          <div style={{ fontSize: 13.5 }}>
+            AI分類: <b>レベル{pending.level}</b>（確信度 {pending.confidence === "high" ? "高" : pending.confidence === "low" ? "低" : "中"}）
+          </div>
+          <div style={{ fontSize: 12.5, color: DAY.textDim }}>{pending.description}</div>
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <button
+              onClick={() => {
+                onAdopt({
+                  zoneId: zoneSel,
+                  minutes: nowMinutes,
+                  impliedDensity: 15 + (pending.level - 1) * 20,
+                  source: "photo",
+                });
+                setPending(null);
+                setNote("観測として採用しました（信頼度重みは最小の0.5）");
+              }}
+              style={{ flex: 1, minHeight: 44, borderRadius: 9, border: "none", background: DAY.text, color: "#FFF", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+            >
+              観測に採用
+            </button>
+            <button
+              onClick={() => setPending(null)}
+              style={{ flex: 1, minHeight: 44, borderRadius: 9, border: `1px solid ${DAY.line}`, background: "#FFF", fontSize: 13, cursor: "pointer" }}
+            >
+              破棄
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
