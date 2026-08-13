@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DAY } from "@/lib/ui/day-theme";
 import { useScenario } from "@/lib/ui/scenario-context";
-import { centroid, dayPlan, forecastZones } from "@/lib/forecast/model";
-import { HOURS, VENUE, zonesFor } from "@/lib/forecast/venue";
-import type { Zone } from "@/lib/forecast/types";
-import { postsFor, ROLE_LABEL, zoneById, type Post } from "@/lib/ops/staffing";
-import VenueMap, { type StaffMark } from "./venue-map";
+import { dayPlan, forecastZones } from "@/lib/forecast/model";
+import { HOURS, VENUE } from "@/lib/forecast/venue";
+import { postsFor, ROLE_LABEL, zoneById } from "@/lib/ops/staffing";
+import { ROSTER } from "@/lib/data/roster";
+import { isAssignedTo, latestDispatchFor, memberBadge } from "@/lib/ops/board";
 import {
   fuseObservations,
   correctionFactor,
@@ -46,7 +46,7 @@ type Proposal = {
   reason: string;
 };
 
-export default function AdjustConsole() {
+export default function AdjustConsole({ onOpenBoard }: { onOpenBoard?: () => void } = {}) {
   const { scenario } = useScenario();
   const [hour, setHour] = useState(15);
   const [zoneSel, setZoneSel] = useState("wg");
@@ -235,150 +235,21 @@ export default function AdjustConsole() {
   }
 
   const selZone = zoneById(zoneSel);
-  const stale = (s: Staff) => Date.now() - s.updatedAt > 15 * 60_000;
 
-  // ── 配置ボードの全体マップ（タップ2回で移動指示・2026-08-13 追加） ──
-  // 入場済みスタッフは zoneId から位置を引く（postCode は「着きました」応答で
-  // 「元コード→」形式に書き換わるため、位置決めには使えない — staff-console.tsx:117 参照）。
-  // 空席ポストは「そのゾーンのポスト数 − 入場済み人数」の残りをそのまま空席マークにする
-  // （個々のポストコードとの厳密な対応は追わない。同じ理由で追えない）。
-  const { marks, entryStaff, dimmedIdx, zoneBadges } = useMemo(() => {
-    const marksArr: StaffMark[] = [];
-    const entries: (Staff | null)[] = [];
-    const dimmed = new Set<number>();
-    const badges: Record<string, number> = {};
-
-    const byZone = new Map<string, Staff[]>();
-    for (const s of staffList) {
-      // presence登録（配置待ち）はマップに描かない（zoneId空はまだ実配置ではない）
-      if (!s.zoneId) continue;
-      const arr = byZone.get(s.zoneId) ?? [];
-      arr.push(s);
-      byZone.set(s.zoneId, arr);
-      badges[s.zoneId] = (badges[s.zoneId] ?? 0) + 1;
+  // ── 配置サマリー（盤面・メンバーリスト・移動指示は「配置」タブへ移設 2026-08-13） ──
+  // 配信の入口を配置タブの1箇所に集約するため、旧・配置ボード（マップ+タップ移動+モーダル）は
+  // staff-board.tsx へ移した。ここでは集計だけを出す（staff-boardの集計ピルと同じ規則）
+  const boardSummary = useMemo(() => {
+    const staffByName = new Map(staffList.map((s) => [s.name, s]));
+    const now = Date.now();
+    const counts = { onpost: 0, moving: 0, waiting: 0, unregistered: 0, away: 0 };
+    for (const m of ROSTER) {
+      const b = memberBadge(staffByName.get(m.name), latestDispatchFor(m.name, dispatches), now);
+      counts[b.status] += 1;
     }
-
-    byZone.forEach((list, zoneId) => {
-      const basePost = posts.find((p) => p.zoneId === zoneId);
-      const zone = zoneById(zoneId);
-      const base = basePost?.at ?? (zone ? centroid(zone.shape) : { x: 0, y: 0 });
-      list.forEach((s, i) => {
-        marksArr.push({
-          at: { x: base.x + (i - (list.length - 1) / 2) * 34, y: base.y },
-          role: s.role,
-          label: s.postCode,
-        });
-        entries.push(s);
-      });
-    });
-
-    const postsByZone = new Map<string, Post[]>();
-    for (const p of posts) {
-      const arr = postsByZone.get(p.zoneId) ?? [];
-      arr.push(p);
-      postsByZone.set(p.zoneId, arr);
-    }
-    postsByZone.forEach((zonePosts, zoneId) => {
-      const occupied = byZone.get(zoneId)?.length ?? 0;
-      for (const p of zonePosts.slice(occupied)) {
-        dimmed.add(marksArr.length);
-        marksArr.push({ at: p.at, role: p.role, label: p.code });
-        entries.push(null);
-      }
-    });
-
-    return { marks: marksArr, entryStaff: entries, dimmedIdx: dimmed, zoneBadges: badges };
-  }, [staffList, posts]);
-
-  const [selStaff, setSelStaff] = useState<Staff | null>(null);
-  const [moveTarget, setMoveTarget] = useState<Zone | null>(null);
-  const [moveReason, setMoveReason] = useState("");
-  const [moveUrgency, setMoveUrgency] = useState<"now" | "soon">("soon");
-  const [moveBusy, setMoveBusy] = useState(false);
-  const [moveError, setMoveError] = useState("");
-  const [dispatchNotice, setDispatchNotice] = useState("");
-
-  // 選択中スタッフをポーリング最新値へ同期する（fromCode が古いまま配信されるのを防ぐ）
-  useEffect(() => {
-    if (!selStaff) return;
-    const fresh = staffList.find((s) => s.name === selStaff.name);
-    if (!fresh) {
-      setSelStaff(null);
-      return;
-    }
-    if (fresh !== selStaff) setSelStaff(fresh);
-  }, [staffList, selStaff]);
-
-  useEffect(() => {
-    if (!dispatchNotice) return;
-    const t = setTimeout(() => setDispatchNotice(""), 6000);
-    return () => clearTimeout(t);
-  }, [dispatchNotice]);
-
-  const selStaffIndex = selStaff ? entryStaff.findIndex((s) => s?.name === selStaff.name) : null;
-
-  const handleStaffClick = useCallback(
-    (i: number) => {
-      const s = entryStaff[i];
-      if (!s) return;
-      setSelStaff((prev) => (prev && prev.name === s.name ? null : s));
-    },
-    [entryStaff]
-  );
-
-  const handleZoneClick = useCallback(
-    (zoneId: string) => {
-      if (!selStaff) return;
-      const z = zoneById(zoneId);
-      if (!z) return;
-      setMoveTarget(z);
-      setMoveReason("");
-      setMoveUrgency("soon");
-      setMoveError("");
-    },
-    [selStaff]
-  );
-
-  function cancelMove() {
-    if (moveBusy) return;
-    setMoveTarget(null);
-    setMoveError("");
-  }
-
-  async function submitMove() {
-    if (!selStaff || !moveTarget || moveBusy) return;
-    setMoveBusy(true);
-    setMoveError("");
-    try {
-      const reason = moveReason.trim();
-      const res = await fetch("/api/dispatch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          staffName: selStaff.name,
-          fromCode: selStaff.postCode,
-          toZoneId: moveTarget.id,
-          action: reason || "応援に入ってください",
-          urgency: moveUrgency,
-          reason: reason || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMoveError(`配信できませんでした: ${data?.error ?? res.status}`);
-        return;
-      }
-      setSelStaff(null);
-      setMoveTarget(null);
-      setMoveReason("");
-      setMoveUrgency("soon");
-      setDispatchNotice("配信しました。スタッフの応答は受信箱→盤面に反映されます");
-    } catch {
-      setMoveError("配信できませんでした: 通信エラー");
-    } finally {
-      setMoveBusy(false);
-    }
-  }
+    const vacant = posts.filter((p) => !staffList.some((s) => isAssignedTo(s.postCode, p.code))).length;
+    return { ...counts, vacant };
+  }, [staffList, dispatches, posts]);
 
   return (
     <div style={{ background: DAY.page, color: DAY.text, borderRadius: 16, border: `1px solid ${DAY.line}`, padding: 14, display: "grid", gap: 12 }}>
@@ -476,95 +347,53 @@ export default function AdjustConsole() {
           )}
         </section>
 
-        {/* ── 3. 配置ボード ── */}
+        {/* ── 3. 配置サマリー（盤面は「配置」タブへ移設 2026-08-13） ── */}
         <section style={panel}>
-          <h3 style={h3}>配置ボード</h3>
-          {dispatchNotice && (
-            <div
-              style={{
-                background: "#EAF7F1",
-                border: "1px solid #0F6E56",
-                borderRadius: 9,
-                padding: "8px 10px",
-                fontSize: 13,
-                color: "#0F6E56",
-                marginBottom: 8,
-              }}
-            >
-              {dispatchNotice}
-            </div>
-          )}
-          <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 6 }}>
-            申告の最終状態＋時刻。15分更新なしは「古い」。マップのスタッフをタップ→移動先ゾーンをタップで、移動指示を出せます（配信前に必ず確認画面）。
-          </div>
-          {posts.map((p: Post) => {
-            const assigned = staffList.filter((s) => s.postCode.startsWith(p.code));
-            return (
-              <div key={p.code} style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 0", borderBottom: `1px solid ${DAY.line}`, fontSize: 13 }}>
-                <span className="cw-mono" style={{ width: 40, fontWeight: 700 }}>{p.code}</span>
-                <span style={{ flex: 1 }}>{p.zoneName}・{ROLE_LABEL[p.role]}</span>
-                {assigned.length === 0 ? (
-                  <span style={{ color: DAY.danger, fontWeight: 700, fontSize: 13 }}>空席</span>
-                ) : (
-                  assigned.map((s) => (
-                    <span key={s.name} style={{ fontSize: 13 }}>
-                      {s.name}
-                      <b style={{ marginLeft: 4, color: s.state === "onpost" ? "#0F6E56" : s.state === "moving" ? "#B45309" : DAY.danger }}>
-                        {s.state === "onpost" ? "着任" : s.state === "moving" ? "移動中" : "離脱"}
-                      </b>
-                      {stale(s) && <span style={{ color: DAY.danger, fontSize: 13 }}>（古い）</span>}
-                    </span>
-                  ))
-                )}
-              </div>
-            );
-          })}
-          {/* 未達の指示 */}
-          {dispatches.filter((d) => d.status === "sent" && Date.now() - d.createdAt > 10 * 60_000).map((d) => (
-            <div key={d.id} style={{ marginTop: 8, fontSize: 13, color: DAY.danger }}>
-              ⚠ {d.staffName}への指示（{d.toZoneName}）が10分以上未達 — 再送か無線確認を
-            </div>
-          ))}
-
-          {/* 全体マップ（タップ2回で移動指示） */}
-          <div style={{ marginTop: 12 }}>
-            {selStaff && (
-              <div
+          <h3 style={h3}>配置サマリー</h3>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            {(
+              [
+                ["着任", boardSummary.onpost, "#0F6E56"],
+                ["移動中", boardSummary.moving, "#B45309"],
+                ["配置待ち", boardSummary.waiting, "#1D4ED8"],
+                ["未接続", boardSummary.unregistered, DAY.textFaint],
+                ["空席", boardSummary.vacant, DAY.danger],
+              ] as const
+            ).map(([label, n, color]) => (
+              <span
+                key={label}
                 style={{
-                  background: DAY.text,
-                  color: "#FFFFFF",
-                  borderRadius: 9,
-                  padding: "0 12px",
+                  border: `1px solid ${DAY.line}`,
+                  borderRadius: 999,
+                  padding: "4px 10px",
                   fontSize: 13,
                   fontWeight: 700,
-                  minHeight: 44,
-                  display: "flex",
-                  alignItems: "center",
-                  marginBottom: 8,
+                  color,
                 }}
               >
-                {selStaff.name}（{selStaff.postCode}）を選択中 — 移動先のゾーンをタップ。もう一度タップで解除
-              </div>
-            )}
-            <VenueMap
-              zones={zonesFor("in")}
-              hour={hour}
-              scenario={scenario}
-              layer="crowd"
-              staff={marks}
-              onStaffClick={handleStaffClick}
-              selectedStaffIndex={selStaffIndex}
-              onZoneClick={selStaff ? handleZoneClick : undefined}
-              zoneBadges={zoneBadges}
-              dimmedStaffIndices={dimmedIdx}
-            />
-            <div style={{ display: "flex", gap: 12, fontSize: 13, color: DAY.textFaint, marginTop: 6, flexWrap: "wrap" }}>
-              <span>水=給水</span>
-              <span>誘=誘導</span>
-              <span>救=救護</span>
-              <span>薄い丸=空席</span>
-            </div>
+                {label} {n}
+              </span>
+            ))}
           </div>
+          <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 8 }}>
+            メンバーの一覧・マップ・移動指示は「配置」タブに集約
+          </div>
+          <button
+            onClick={onOpenBoard}
+            style={{
+              width: "100%",
+              minHeight: 44,
+              borderRadius: 9,
+              border: "none",
+              background: DAY.text,
+              color: "#FFF",
+              fontWeight: 700,
+              fontSize: 15,
+              cursor: "pointer",
+            }}
+          >
+            配置タブを開く
+          </button>
         </section>
 
         {/* ── 4. AI提案 → 承認 → 配信 ── */}
@@ -601,128 +430,6 @@ export default function AdjustConsole() {
 
       {/* ── 5. 退場シミュレーション（人流モデル・決定的） ── */}
       <EgressPanel tickets={scenario.tickets} />
-
-      {/* 移動指示の最終確認モーダル（配信の唯一の入口 = /api/dispatch。人間承認の不変条件） */}
-      {selStaff && moveTarget && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="移動指示の最終確認"
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(11,17,31,0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              background: "#FFFFFF",
-              borderRadius: 14,
-              padding: 20,
-              maxWidth: 420,
-              width: "100%",
-              display: "grid",
-              gap: 12,
-            }}
-          >
-            <h3 style={{ margin: 0, fontSize: 19, fontWeight: 700, color: DAY.text }}>移動指示の最終確認</h3>
-            <p style={{ margin: 0, fontSize: 15, color: DAY.text }}>
-              <b>{selStaff.name}</b> を <b>{selStaff.postCode} → {moveTarget.name}</b> へ
-            </p>
-            <input
-              type="text"
-              value={moveReason}
-              onChange={(e) => setMoveReason(e.target.value)}
-              placeholder="例）西ゲートの列が伸びているため"
-              aria-label="移動の理由（任意）"
-              style={{
-                minHeight: 44,
-                borderRadius: 9,
-                border: `1px solid ${DAY.line}`,
-                padding: "0 10px",
-                fontSize: 13,
-                color: DAY.text,
-              }}
-            />
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={() => setMoveUrgency("now")}
-                style={{
-                  flex: 1,
-                  minHeight: 44,
-                  borderRadius: 9,
-                  border: moveUrgency === "now" ? `2px solid ${DAY.danger}` : `1px solid ${DAY.line}`,
-                  background: moveUrgency === "now" ? "#FCE8ED" : "#FFF",
-                  color: DAY.text,
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: "pointer",
-                }}
-              >
-                いますぐ
-              </button>
-              <button
-                onClick={() => setMoveUrgency("soon")}
-                style={{
-                  flex: 1,
-                  minHeight: 44,
-                  borderRadius: 9,
-                  border: moveUrgency === "soon" ? `2px solid ${DAY.text}` : `1px solid ${DAY.line}`,
-                  background: moveUrgency === "soon" ? "#EEF1F7" : "#FFF",
-                  color: DAY.text,
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: "pointer",
-                }}
-              >
-                手すきで
-              </button>
-            </div>
-            {moveError && <div style={{ fontSize: 13, color: DAY.danger }}>{moveError}</div>}
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={submitMove}
-                disabled={moveBusy}
-                style={{
-                  flex: 1,
-                  minHeight: 48,
-                  borderRadius: 10,
-                  border: "none",
-                  background: moveBusy ? "#93A3C0" : DAY.text,
-                  color: "#FFF",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  cursor: moveBusy ? "wait" : "pointer",
-                }}
-              >
-                {moveBusy ? "配信中…" : "指示を配信"}
-              </button>
-              <button
-                onClick={cancelMove}
-                disabled={moveBusy}
-                style={{
-                  flex: 1,
-                  minHeight: 48,
-                  borderRadius: 10,
-                  border: `1px solid ${DAY.line}`,
-                  background: "#FFF",
-                  color: DAY.text,
-                  fontWeight: 700,
-                  fontSize: 15,
-                  cursor: moveBusy ? "wait" : "pointer",
-                }}
-              >
-                やめる
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

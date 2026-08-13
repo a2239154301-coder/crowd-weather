@@ -297,7 +297,7 @@ export default function AppShell() {
               </span>
             </div>
             {liveView === "status" && <LiveConsole />}
-            {liveView === "adjust" && <AdjustConsole />}
+            {liveView === "adjust" && <AdjustConsole onOpenBoard={() => setLiveView("board")} />}
             {liveView === "board" && <StaffBoard />}
             {liveView === "staff" && (
               <>
