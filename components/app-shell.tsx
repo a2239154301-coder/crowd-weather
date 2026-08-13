@@ -11,6 +11,7 @@ import LiveConsole from "./live-console";
 import AdjustConsole from "./adjust-console";
 import StaffConsole from "./staff-console";
 import StaffBoard from "./staff-board";
+import DeploymentEditor from "./deployment/deployment-editor";
 import PlanOutput from "./plan-output";
 import EvidencePanel from "./evidence-panel";
 import { ScenarioProvider } from "@/lib/ui/scenario-context";
@@ -59,7 +60,7 @@ const MODE_TABS = [
   ["visitor", "3 来場者向け"],
   ["judge", "4 審査向け"],
 ] as const;
-const ORGANIZER_VIEWS = ["ops", "output", "ingest"] as const;
+const ORGANIZER_VIEWS = ["ops", "deploy", "output", "ingest"] as const;
 const LIVE_VIEWS = ["status", "adjust", "board", "staff"] as const;
 
 type Mode = (typeof MODE_TABS)[number][0];
@@ -67,9 +68,16 @@ type OrganizerView = (typeof ORGANIZER_VIEWS)[number];
 type LiveView = (typeof LIVE_VIEWS)[number];
 const MODES: readonly Mode[] = MODE_TABS.map(([k]) => k);
 
-/** 2026-08-14、主催者サブタブの順序を作業順（予報→読み込み→出力）に並べ替え（項目12） */
+/**
+ * 2026-08-14、主催者サブタブの順序を作業順（予報→読み込み→出力）に並べ替え（項目12）。
+ * 同日、人員配置エディタを「予報コンソール」の直後に追加（予報→人員配置→読み込み→出力）。
+ * 会場図面の読み込み前でも仮の会場（VENUE既定）に対して配置計画を作り始められるため、
+ * 「読み込む」より前に置く（配置計画はSTEPS/CURRENT_STEPS削除後の2点追加で足りる —
+ * ここに1タブ追加するだけで、他の描画分岐は変更不要）。
+ */
 const ORGANIZER_TABS: [OrganizerView, string][] = [
   ["ops", "予報コンソール"],
+  ["deploy", "人員配置"],
   ["ingest", "会場を読み込む"],
   ["output", "計画書出力"],
 ];
@@ -267,6 +275,7 @@ function AppShellInner() {
             </div>
 
             {view === "ops" && <OpsConsole />}
+            {view === "deploy" && <DeploymentEditor />}
             {view === "output" && <PlanOutput />}
             {view === "ingest" && <IngestPanel />}
           </>

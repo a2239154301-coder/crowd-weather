@@ -167,7 +167,31 @@ type Props = {
    * 事実にすること（従来は compact が無条件にラベルを抑制していて説明と食い違っていた）。
    */
   staffLabelInCompact?: boolean;
+  /**
+   * 人員配置エディタのマーカー起点D&D（2026-08-14 追加）。3つとも省略時は従来描画・
+   * 従来の当たり判定と完全一致する（新しい要素・ハンドラを一切追加しない）。
+   *
+   * - `staffHitRadius`: 可視の駒の下に敷く透明な当たり判定円の半径。
+   *   指で掴みやすくするための拡大（ズーム/パンを作らない代替）
+   * - `onStaffPointerDown`: 駒 `<g>` の pointerdown をそのまま転送する。実際の武装（arm）・
+   *   長押し判定は呼び出し側が `useDragToMap().markHandlers(name).onPointerDown` へ委譲する
+   * - `staffDraggingIndex`: 掴んでいる駒のindex。該当駒を薄く（opacity 0.4）し、
+   *   `pointerEvents: "none"` にして自分自身へのドロップを自然に除外する
+   *   （hitTest の elementFromPoint が自分をスキップし、下のスロット/ゾーンへ通り抜ける）
+   */
+  staffHitRadius?: number;
+  onStaffPointerDown?: (index: number, e: React.PointerEvent) => void;
+  staffDraggingIndex?: number | null;
 };
+
+/** 駒（ピース）の半径。2026-08-14、13→16に拡大（人員配置エディタ「チェスの駒」要求） */
+const PIECE_R = 16;
+/**
+ * スロット（マス）の半径。駒より一回り大きくして、駒の下からリングが覗く「ハロー」を作る
+ * （PIECE_R=16と同径だと駒に完全に隠れて「常時見える」にならない）。
+ * 未配置（vacant）のときはこのリングが唯一の可視表現になる。
+ */
+const SLOT_R = 18;
 
 export default function VenueMap({
   zones,
@@ -189,6 +213,9 @@ export default function VenueMap({
   labelStaffIndices,
   highlightZoneId = null,
   staffLabelInCompact = false,
+  staffHitRadius,
+  onStaffPointerDown,
+  staffDraggingIndex = null,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
   /** ポストコードラベルの hover 表示用（2026-08-13 追加）。staffLabelMode="focus" のときだけ意味を持つ */
@@ -506,11 +533,24 @@ export default function VenueMap({
             );
           })}
 
-        {/* 5. スタッフ配置 */}
+        {/*
+          5. スタッフ配置 — 2026-08-14「チェスの盤と駒」に再構成（人員配置エディタ要求の核心）。
+          従来は「空席=細枠／着任済み=ベタ塗り」を1レイヤーで分岐していたため、人が乗った瞬間に
+          リングが消え「ここがポストだ」という土台の情報が読めなくなっていた（中橋氏レビュー指摘とは
+          別の新しい指摘）。スロット（マス・5a）と駒（ピース・5b）の2レイヤーに分け、
+          マスは常時・駒はその上に重ねる形にする。
+
+          ⚠ この分割は staff の全呼び出し側（ops-console/security-plan/staff-board/
+          heatmap-console/visitor-route の既存6箇所）に影響する意図的なグローバル変更
+          （spacing 34→40pxの変更と対で、staffing.ts/board.ts 側の座標変更に合わせたもの）。
+          一方、新規追加の3 prop（staffHitRadius/onStaffPointerDown/staffDraggingIndex）は
+          全て省略時 no-op ＝ 既存呼び出しに新しい要素・ハンドラを一切追加しない。
+        */}
+
+        {/* 5a. スロット（マス）— 全ポストに常時描く。役割色の細リングのみ、駒より薄い */}
         {staff?.map((m, i) => {
           const vacant = dimmedStaffIndices?.has(i) ?? false;
           const selected = selectedStaffIndex === i;
-          const clickable = !vacant && Boolean(onStaffClick);
           /**
            * ラベル（マーカー下のポストコード）を描くかどうか。
            * "all" は従来どおり常時（!compactの中で無条件true）。"focus" は選択中・hover中・
@@ -519,20 +559,113 @@ export default function VenueMap({
           const showLabel =
             (!compact || staffLabelInCompact) &&
             (staffLabelMode === "all" || selected || hoveredStaff === i || (labelStaffIndices?.has(i) ?? false));
+
+          if (!vacant) {
+            // 着任済み: マスは駒(5b)の下に敷くだけの装飾。data属性・pointer-eventsを持たせず
+            // 完全に無干渉にする（駒がヒットテストを引き受ける。既存クリック/D&D経路を一切変えない）
+            return (
+              <circle
+                key={`slot-${i}`}
+                cx={m.at.x}
+                cy={m.at.y}
+                r={SLOT_R}
+                fill="none"
+                stroke={ROLE_COLOR[m.role]}
+                strokeWidth={1.3}
+                strokeOpacity={0.55}
+                style={{ pointerEvents: "none" }}
+              />
+            );
+          }
+
+          // 空席ポスト（従来のvacant描画をそのままこのレイヤーへ移設。挙動は無変更）:
+          // ロール色の細枠のみ・塗りなし。点線にはしない — 点線はghostMarks（移動指示中）が
+          // 既に使っている意味なので、ここで点線にすると空席と移動指示中の区別がつかなくなる。
+          // fill="none"だと内側がヒットテスト対象から外れるため、pointerEvents:"all"で
+          // 丸全体をhover/ドロップ対象にする（D&Dで空席の丸を狙って落とす操作の土台）。
           return (
             <g
-              key={i}
-              /* 空席ポストにだけコードを持たせる。ドラッグして空席の丸の上で離したときは
-                 移動先ポストまで確定させる（ゾーンに落ちた場合は最初の空きポストに任せる）。
-                 着任済みスタッフの丸には付けない — そこへドロップしても行き先にならないため */
-              data-post-code={vacant ? m.label : undefined}
+              key={`slot-${i}`}
+              data-post-code={m.label}
+              data-zone-id={m.zoneId}
+              opacity={0.75}
+              onMouseEnter={staffLabelMode === "focus" ? () => setHoveredStaff(i) : undefined}
+              onMouseLeave={
+                staffLabelMode === "focus"
+                  ? () => setHoveredStaff((prev) => (prev === i ? null : prev))
+                  : undefined
+              }
+            >
+              {selected && (
+                <circle cx={m.at.x} cy={m.at.y} r={17} fill="none" stroke="#FFFFFF" strokeWidth={3} />
+              )}
+              <circle
+                cx={m.at.x}
+                cy={m.at.y}
+                r={SLOT_R}
+                fill="none"
+                stroke={ROLE_COLOR[m.role]}
+                strokeWidth={1.6}
+                style={{ pointerEvents: "all" }}
+              />
+              <text
+                x={m.at.x}
+                y={m.at.y + 5}
+                textAnchor="middle"
+                fontSize={11}
+                fontWeight={700}
+                fill={INK.textDim}
+                style={{ pointerEvents: "none" }}
+              >
+                {m.glyph ?? ROLE_GLYPH[m.role]}
+              </text>
+              {showLabel && (
+                <text
+                  x={m.at.x}
+                  y={m.at.y + 18}
+                  textAnchor="middle"
+                  fontSize={11}
+                  fontWeight={600}
+                  fill={INK.text}
+                  stroke={INK.page}
+                  strokeWidth={3}
+                  paintOrder="stroke"
+                  style={{ pointerEvents: "none" }}
+                >
+                  {m.label}
+                </text>
+              )}
+            </g>
+          );
+        })}
+
+        {/* 5b. 駒（ピース）— 着任済みのみ。スロットの上に重ねる */}
+        {staff?.map((m, i) => {
+          const vacant = dimmedStaffIndices?.has(i) ?? false;
+          if (vacant) return null;
+
+          const selected = selectedStaffIndex === i;
+          const clickable = Boolean(onStaffClick);
+          const dragging = staffDraggingIndex === i;
+          const showLabel =
+            (!compact || staffLabelInCompact) &&
+            (staffLabelMode === "all" || selected || hoveredStaff === i || (labelStaffIndices?.has(i) ?? false));
+          const cursor = clickable ? "pointer" : onStaffPointerDown ? "grab" : "default";
+
+          return (
+            <g
+              key={`piece-${i}`}
               /* 丸の上でドロップされたときの行き先。ゾーンの<g>とは兄弟なので、
                  これが無いと closest("[data-zone-id]") が空振りして「丸を狙って落とす」が効かない */
               data-zone-id={m.zoneId}
-              opacity={vacant ? 0.75 : 1}
-              /* hover追跡は "focus" のときだけ張る。"all"（計画コンソール等の既存呼び出し）は
-                 ラベルが常時出ていて hover を見る必要がなく、マーカーを撫でるたびに
-                 setState で再レンダーさせる理由がない（既存呼び出しの挙動を変えない） */
+              /* 着任済みポストへのドロップ＝swap の行き先。onStaffPointerDown（人員配置エディタ）
+                 が渡されているときだけ持たせる。既存呼び出し（staff-board等）はこのpropを渡さない
+                 ため、従来どおり着任済みの丸はdata-post-codeを持たず、ドロップは常にゾーン止まりになる */
+              data-post-code={onStaffPointerDown ? m.label : undefined}
+              opacity={dragging ? 0.4 : 1}
+              /* 掴んでいる最中は自分自身をヒットテストから除外する（自己ドロップの除外）。
+                 elementFromPoint が自分をスキップして下のスロット/ゾーンへ通り抜ける */
+              style={{ cursor, pointerEvents: dragging ? "none" : "auto" }}
               onMouseEnter={staffLabelMode === "focus" ? () => setHoveredStaff(i) : undefined}
               onMouseLeave={
                 staffLabelMode === "focus"
@@ -547,41 +680,30 @@ export default function VenueMap({
                     }
                   : undefined
               }
-              style={{ cursor: clickable ? "pointer" : "default" }}
+              onPointerDown={onStaffPointerDown ? (e) => onStaffPointerDown(i, e) : undefined}
+              onContextMenu={onStaffPointerDown ? (e) => e.preventDefault() : undefined}
             >
               {selected && (
                 <circle cx={m.at.x} cy={m.at.y} r={17} fill="none" stroke="#FFFFFF" strokeWidth={3} />
               )}
-              {vacant ? (
-                /*
-                 * 空席ポスト（2026-08-13 改訂）: 従来はロール色ベタ塗りを <g opacity={0.35}> で
-                 * 一括減光していたが、「薄い人」＝AIが仮に置いた配置案に見えるという誤解を招いていた
-                 * （中橋氏レビュー指摘）。塗りをやめ、細実線の空枠にする。
-                 * strokeDasharray は付けない — 点線は ghostMarks（移動指示中）が既に使っている意味
-                 * なので、ここでも点線にすると「空席」と「移動指示中」の区別がつかなくなる。
-                 * fill="none" だと内側がヒットテスト対象から外れる（デフォルトpointer-eventsは
-                 * visiblePainted）ため、hover でラベルを出す挙動（staffLabelMode="focus"）が
-                 * 円の内側では働かない。pointerEvents:"all" で丸全体をhover対象にする。
-                 */
+              {/* 当たり判定の拡大（指で掴みやすくする）。可視の駒より下に敷く透明円 */}
+              {staffHitRadius != null && (
                 <circle
                   cx={m.at.x}
                   cy={m.at.y}
-                  r={13}
-                  fill="none"
-                  stroke={ROLE_COLOR[m.role]}
-                  strokeWidth={1.6}
+                  r={staffHitRadius}
+                  fill="transparent"
                   style={{ pointerEvents: "all" }}
                 />
-              ) : (
-                <circle cx={m.at.x} cy={m.at.y} r={13} fill={ROLE_COLOR[m.role]} stroke="#0A0E17" strokeWidth={2.5} />
               )}
+              <circle cx={m.at.x} cy={m.at.y} r={PIECE_R} fill={ROLE_COLOR[m.role]} stroke="#0A0E17" strokeWidth={2.5} />
               <text
                 x={m.at.x}
                 y={m.at.y + 5}
                 textAnchor="middle"
-                fontSize={vacant ? 11 : 13}
+                fontSize={13}
                 fontWeight={700}
-                fill={vacant ? INK.textDim : "#0A0E17"}
+                fill="#0A0E17"
                 style={{ pointerEvents: "none" }}
               >
                 {m.glyph ?? ROLE_GLYPH[m.role]}
@@ -589,7 +711,7 @@ export default function VenueMap({
               {showLabel && (
                 <text
                   x={m.at.x}
-                  y={m.at.y + 18}
+                  y={m.at.y + 21}
                   textAnchor="middle"
                   fontSize={11}
                   fontWeight={600}

@@ -155,7 +155,9 @@ export function buildBoardMarks(staffList: Staff[], posts: Post[], dispatches: D
     const base = basePost?.at ?? (zone ? centroid(zone.shape) : { x: 0, y: 0 });
     list.forEach((s, i) => {
       marks.push({
-        at: { x: base.x + (i - (list.length - 1) / 2) * 34, y: base.y },
+        // 40px間隔（2026-08-14、staffing.ts の put()/putReceptionRow() と同じ拡張。
+        // 人員配置エディタの駒 r=16 化に合わせて34px→40pxへ。同一ゾーン内の隙間を確保する）
+        at: { x: base.x + (i - (list.length - 1) / 2) * 40, y: base.y },
         role: s.role,
         label: s.postCode,
         glyph: s.name.charAt(0),

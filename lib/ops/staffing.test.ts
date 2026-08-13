@@ -87,7 +87,9 @@ describe("postsFor — reception 追加後の既存ロジック固定", () => {
     expect(reception.slice(4).every((p) => p.zoneId === "eg")).toBe(true);
   });
 
-  it("受付ポストの座標は同一ゾーン内で1行(y共通)・34px間隔で横並び", () => {
+  it("受付ポストの座標は同一ゾーン内で1行(y共通)・40px間隔で横並び", () => {
+    // 2026-08-14: 人員配置エディタで駒（r=13→16）と間隔（34px→40px）を拡張したため、
+    // この座標固定テストの期待値もあわせて更新する（staffing.ts put()/putReceptionRow() 参照）
     const posts = postsFor(fakePlan({}));
     const wgR = posts.filter((p) => p.zoneId === "wg" && p.role === "reception");
     expect(wgR).toHaveLength(4);
@@ -95,7 +97,7 @@ describe("postsFor — reception 追加後の既存ロジック固定", () => {
     expect(ys.size).toBe(1);
     const xs = wgR.map((p) => p.at.x).sort((a, b) => a - b);
     for (let i = 1; i < xs.length; i++) {
-      expect(xs[i] - xs[i - 1]).toBeCloseTo(34, 5);
+      expect(xs[i] - xs[i - 1]).toBeCloseTo(40, 5);
     }
   });
 

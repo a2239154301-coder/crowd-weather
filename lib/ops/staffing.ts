@@ -77,8 +77,9 @@ export function postsFor(plan: DayPlan, opts?: { reception?: boolean }): Post[] 
         code: `${area}-${counters[area]}`,
         zoneId,
         zoneName: z.name,
-        // 同一ゾーン内は横に34pxずつ並べる（旧marksForの配置と同じ）
-        at: { x: c.x + (i - (n - 1) / 2) * 34, y: c.y + 26 },
+        // 同一ゾーン内は横に40pxずつ並べる（2026-08-14、人員配置エディタの駒 r=16化に合わせ
+        // 34px→40pxへ拡張。34pxのままだと隣接ポストの駒同士の隙間が2pxしか無くなるため）
+        at: { x: c.x + (i - (n - 1) / 2) * 40, y: c.y + 26 },
         role,
       });
     }
@@ -118,8 +119,8 @@ export function postsFor(plan: DayPlan, opts?: { reception?: boolean }): Post[] 
 
 /**
  * 受付ポストを4人、1ゾーンに配置する（`R-{from}`〜`R-{from+3}`）。
- * ゾーン centroid から y+30 の行に34px間隔で横並び（既存ポストの y+26 の行とは
- * 縦にずらし、見た目の重なりを避ける）。
+ * ゾーン centroid から y+30 の行に40px間隔で横並び（既存ポストの y+26 の行とは
+ * 縦にずらし、見た目の重なりを避ける。間隔は2026-08-14に34px→40pxへ拡張。理由は put() 内コメント参照）。
  */
 function putReceptionRow(inside: Zone[], posts: Post[], zoneId: string, from: number): void {
   const z = inside.find((v) => v.id === zoneId);
@@ -131,7 +132,7 @@ function putReceptionRow(inside: Zone[], posts: Post[], zoneId: string, from: nu
       code: `R-${from + i}`,
       zoneId,
       zoneName: z.name,
-      at: { x: c.x + (i - (n - 1) / 2) * 34, y: c.y + 30 },
+      at: { x: c.x + (i - (n - 1) / 2) * 40, y: c.y + 30 },
       role: "reception",
     });
   }

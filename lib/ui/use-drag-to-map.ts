@@ -301,6 +301,52 @@ export function useDragToMap({ onDrop, disabled = false }: Options) {
     [arm, disabled]
   );
 
+  /**
+   * `rowHandlers` の兄弟 — 会場図上のスタッフ丸（駒）自体を起点にしたドラッグ用
+   * （人員配置エディタ 2026-08-14 追加）。
+   *
+   * リスト行はHTML要素なので `style`（touchAction/userSelect）を返せたが、
+   * こちらはSVG `<g>` に付ける前提のため **`style` は返さない**
+   * （SVG要素には効かない。スクロール抑止は既存の window touchmove 抑止だけで足りる）。
+   * 閾値判定・長押し・キャンセルのコア（window の pointermove/up/cancel・elementFromPoint
+   * ヒットテスト）は `rowHandlers` と完全に共有する（同じ pressRef/armedRef を使うため、
+   * 発生源がリスト行かマーカーかを問わない）。
+   */
+  const markHandlers = useCallback(
+    (name: string) => ({
+      onPointerDown: (e: ReactPointerEvent) => {
+        if (disabled) return;
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        if (pressRef.current) return;
+
+        const press: PressState = {
+          name,
+          pointerId: e.pointerId,
+          pointerType: e.pointerType,
+          startX: e.clientX,
+          startY: e.clientY,
+          timer: null,
+          abandoned: false,
+        };
+        pressRef.current = press;
+
+        if (e.pointerType === "touch") {
+          const { clientX, clientY } = e;
+          press.timer = setTimeout(() => {
+            const cur = pressRef.current;
+            if (!cur || cur !== press || cur.abandoned) return;
+            cur.timer = null;
+            arm(name, clientX, clientY);
+          }, LONG_PRESS_MS);
+        }
+      },
+      onContextMenu: (e: ReactMouseEvent) => {
+        if (pressRef.current || armedRef.current) e.preventDefault();
+      },
+    }),
+    [arm, disabled]
+  );
+
   return {
     /** 掴んでいるメンバー名。null=ドラッグしていない */
     draggingName,
@@ -314,5 +360,7 @@ export function useDragToMap({ onDrop, disabled = false }: Options) {
     chipRef,
     /** リスト行に展開するハンドラ群 */
     rowHandlers,
+    /** 会場図上のマーカー（駒）に展開するハンドラ群。`style` を含まない点だけ rowHandlers と異なる */
+    markHandlers,
   };
 }
