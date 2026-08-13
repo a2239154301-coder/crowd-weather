@@ -266,7 +266,18 @@ export default function VenueMap({
               onMouseEnter={() => setHovered(f.zone.id)}
               onMouseLeave={() => setHovered(null)}
               onClick={zoneClickable ? () => onZoneClick!(f.zone.id) : undefined}
+              onKeyDown={
+                zoneClickable
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onZoneClick!(f.zone.id);
+                      }
+                    }
+                  : undefined
+              }
               role={zoneClickable ? "button" : undefined}
+              tabIndex={zoneClickable ? 0 : undefined}
               aria-label={zoneClickable ? `${f.zone.name}へ移動先指定` : undefined}
               style={{ cursor: zoneClickable ? "pointer" : "default" }}
             >

@@ -628,7 +628,7 @@ export default function OpsConsole() {
             />
             <Legend layer={layer} />
             <a
-              href="/heatmap"
+              href={`/heatmap?temp=${scenario.temp}&rh=${scenario.rhPct}&wind=${scenario.windMs}&tickets=${scenario.tickets}&weather=${scenario.weather}&hour=${hour}&date=${scenario.date.y}-${scenario.date.mo}-${scenario.date.d}&lat=${scenario.geo.lat}&lon=${scenario.geo.lon}&place=${encodeURIComponent(scenario.geo.name)}`}
               style={{
                 display: "inline-flex",
                 alignItems: "center",

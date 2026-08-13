@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { INK } from "@/lib/forecast/scales";
 import OpsConsole from "./ops-console";
 import IngestPanel from "./ingest-panel";
@@ -35,11 +36,20 @@ import { DataView } from "./crowd-weather";
  *   メンタルモデルが崩れる、というUIUXレビューP0指摘）
  * - スタッフ画面は「当日を回す」の一環（状況→調整→スタッフの縦串）なので、
  *   最上位から当日モードの3番目のタブへ移した。最上位は4つのまま
+ *
+ * 2026-08-13、画面状態を **URLと同期**した（棚卸しF）。従来は useState のみで、
+ * リロードすると必ず「計画/予報」に戻り（デモ中の事故要因）、見ている画面を
+ * URLで共有できず、ブラウザの戻るも効かなかった。
+ * `?mode=live&view=ops&live=board` の形で3つのタブ状態を持つ。
  */
 
-type Mode = "plan" | "live" | "visitor" | "judge";
-type OrganizerView = "ops" | "output" | "ingest";
-type LiveView = "status" | "adjust" | "board" | "staff";
+const MODES = ["plan", "live", "visitor", "judge"] as const;
+const ORGANIZER_VIEWS = ["ops", "output", "ingest"] as const;
+const LIVE_VIEWS = ["status", "adjust", "board", "staff"] as const;
+
+type Mode = (typeof MODES)[number];
+type OrganizerView = (typeof ORGANIZER_VIEWS)[number];
+type LiveView = (typeof LIVE_VIEWS)[number];
 
 const ORGANIZER_TABS: [OrganizerView, string][] = [
   ["ops", "予報コンソール"],
@@ -52,13 +62,92 @@ const STEPS: { n: number; label: string; hint: string; goto?: OrganizerView }[] 
   { n: 1, label: "会場を読み込む", hint: "写真から初期モデルを生成", goto: "ingest" },
   { n: 2, label: "条件を設定", hint: "実況の取込み or 手動入力", goto: "ops" },
   { n: 3, label: "予報を確認", hint: "混雑・暑熱・日陰・What-if", goto: "ops" },
-  { n: 4, label: "出力する", hint: "指示書・計画書・ブリーフィング", goto: "ops" },
+  { n: 4, label: "出力する", hint: "指示書・計画書・ブリーフィング", goto: "output" },
 ];
 
+/**
+ * いま開いているタブ → 作業手順のどこにいるか。
+ * 予報コンソールは「条件を設定」と「予報を確認」を1画面でやるので2と3の両方が現在地。
+ */
+const CURRENT_STEPS: Record<OrganizerView, number[]> = {
+  ingest: [1],
+  ops: [2, 3],
+  output: [4],
+};
+
+/** URLの値は信用しない。許可リストに無ければ既定値へ倒す */
+function pick<T extends string>(raw: string | null, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(raw as T) ? (raw as T) : fallback;
+}
+
+/**
+ * `useSearchParams` は静的レンダリング時に Suspense 境界を要求する
+ * （境界が無いと `next build` が落ちる）。app/page.tsx を触らずに済むよう、
+ * 境界はこのファイル内に置く（app/gate/page.tsx と同じ形）。
+ * fallback は「/」のプリレンダーHTMLそのものになるため、地色だけは塗っておく
+ * （null にすると初回描画で白が一瞬出る）。
+ */
 export default function AppShell() {
-  const [mode, setMode] = useState<Mode>("plan");
-  const [view, setView] = useState<OrganizerView>("ops");
-  const [liveView, setLiveView] = useState<LiveView>("status");
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: INK.page }} />}>
+      <AppShellInner />
+    </Suspense>
+  );
+}
+
+function AppShellInner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+
+  // 描画の正本は state（タブ切替を router の往復待ちにしない）。
+  // URLは初期値の供給元であり、かつ state の鏡。
+  const [mode, setMode] = useState<Mode>(() => pick(params.get("mode"), MODES, "plan"));
+  const [view, setView] = useState<OrganizerView>(() =>
+    pick(params.get("view"), ORGANIZER_VIEWS, "ops")
+  );
+  const [liveView, setLiveView] = useState<LiveView>(() =>
+    pick(params.get("live"), LIVE_VIEWS, "status")
+  );
+
+  // URL → state。戻る/進む（popstate）と、共有URLを直接開いた場合をここで拾う。
+  // 自分で書いたURLでも走るが、同じ値なので React が再描画を打ち切る
+  useEffect(() => {
+    setMode(pick(params.get("mode"), MODES, "plan"));
+    setView(pick(params.get("view"), ORGANIZER_VIEWS, "ops"));
+    setLiveView(pick(params.get("live"), LIVE_VIEWS, "status"));
+  }, [params]);
+
+  // state → URL。3キーを常に書く（URLを見れば画面が確定する＝そのまま共有できる）。
+  // マウント時には書かない（ユーザー操作していないのに履歴を汚さない）
+  const syncUrl = useCallback(
+    (next: { mode: Mode; view: OrganizerView; live: LiveView }, method: "push" | "replace") => {
+      const qs = new URLSearchParams({ mode: next.mode, view: next.view, live: next.live });
+      const href = `${pathname}?${qs.toString()}`;
+      if (method === "push") router.push(href, { scroll: false });
+      else router.replace(href, { scroll: false });
+    },
+    [pathname, router]
+  );
+
+  /**
+   * モードは push＝「戻る」で前のフェーズに戻れる（デモの導線として意味のある単位）。
+   * 同じモードの再クリックでは履歴を積まない（戻るのに2回押す羽目になるのを防ぐ）
+   */
+  const goMode = (m: Mode) => {
+    if (m === mode) return;
+    setMode(m);
+    syncUrl({ mode: m, view, live: liveView }, "push");
+  };
+  /** サブタブは replace＝履歴をタブ切替で埋めない */
+  const goView = (v: OrganizerView) => {
+    setView(v);
+    syncUrl({ mode, view: v, live: liveView }, "replace");
+  };
+  const goLive = (l: LiveView) => {
+    setLiveView(l);
+    syncUrl({ mode, view, live: l }, "replace");
+  };
 
   return (
     <ScenarioProvider>
@@ -117,7 +206,7 @@ export default function AppShell() {
                 key={k}
                 role="tab"
                 aria-selected={mode === k}
-                onClick={() => setMode(k)}
+                onClick={() => goMode(k)}
                 style={{
                   display: "flex",
                   flexDirection: "column",
@@ -166,7 +255,7 @@ export default function AppShell() {
                 {ORGANIZER_TABS.map(([k, label]) => (
                   <button
                     key={k}
-                    onClick={() => setView(k)}
+                    onClick={() => goView(k)}
                     aria-current={view === k ? "page" : undefined}
                     style={{
                       minHeight: 44,
@@ -198,48 +287,56 @@ export default function AppShell() {
                   gap: 0,
                 }}
               >
-                {STEPS.map((s, i) => (
-                  <li key={s.n} style={{ display: "flex", alignItems: "center" }}>
-                    {i > 0 && (
-                      <span style={{ color: INK.textFaint, fontSize: 13, padding: "0 7px" }}>→</span>
-                    )}
-                    <button
-                      onClick={() => s.goto && setView(s.goto)}
-                      title={s.hint}
-                      style={{
-                        display: "flex",
-                        alignItems: "baseline",
-                        gap: 5,
-                        minHeight: 44,
-                        background: "transparent",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: "2px 3px",
-                        color:
-                          (s.n === 1 && view === "ingest") || (s.n > 1 && view === "ops")
-                            ? INK.text
-                            : INK.textDim,
-                      }}
-                    >
-                      <span
-                        className="cw-mono"
+                {STEPS.map((s, i) => {
+                  const current = CURRENT_STEPS[view].includes(s.n);
+                  return (
+                    <li key={s.n} style={{ display: "flex", alignItems: "center" }}>
+                      {i > 0 && (
+                        <span style={{ color: INK.textFaint, fontSize: 13, padding: "0 7px" }}>
+                          →
+                        </span>
+                      )}
+                      <button
+                        onClick={() => s.goto && goView(s.goto)}
+                        title={s.hint}
+                        aria-current={current ? "step" : undefined}
                         style={{
-                          fontSize: 13,
-                          border: `1px solid ${INK.line}`,
-                          borderRadius: 999,
-                          width: 16,
-                          height: 16,
-                          display: "inline-flex",
+                          display: "flex",
                           alignItems: "center",
-                          justifyContent: "center",
+                          gap: 6,
+                          minHeight: 44,
+                          background: current ? INK.raised : "transparent",
+                          border: "none",
+                          borderRadius: 9,
+                          boxShadow: current ? `inset 0 0 0 1px ${INK.line}` : "none",
+                          cursor: "pointer",
+                          padding: "2px 10px",
+                          color: current ? INK.text : INK.textDim,
                         }}
                       >
-                        {s.n}
-                      </span>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{s.label}</span>
-                    </button>
-                  </li>
-                ))}
+                        <span
+                          className="cw-mono"
+                          style={{
+                            fontSize: 13,
+                            lineHeight: 1,
+                            border: `1px solid ${current ? INK.accent : INK.line}`,
+                            background: current ? INK.accent : "transparent",
+                            color: current ? INK.page : "inherit",
+                            borderRadius: 999,
+                            width: 18,
+                            height: 18,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          {s.n}
+                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>{s.label}</span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ol>
             </div>
 
@@ -273,7 +370,7 @@ export default function AppShell() {
                 ).map(([k, label]) => (
                   <button
                     key={k}
-                    onClick={() => setLiveView(k)}
+                    onClick={() => goLive(k)}
                     aria-current={liveView === k ? "page" : undefined}
                     style={{
                       minHeight: 44,
@@ -297,7 +394,7 @@ export default function AppShell() {
               </span>
             </div>
             {liveView === "status" && <LiveConsole />}
-            {liveView === "adjust" && <AdjustConsole onOpenBoard={() => setLiveView("board")} />}
+            {liveView === "adjust" && <AdjustConsole onOpenBoard={() => goLive("board")} />}
             {liveView === "board" && <StaffBoard />}
             {liveView === "staff" && (
               <>

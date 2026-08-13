@@ -34,9 +34,14 @@ export function middleware(req: NextRequest) {
     return NextResponse.json({ error: "このデモは合言葉が必要です（/gate から入力）" }, { status: 401 });
   }
 
+  // next にはパスだけでなくクエリも含める（2026-08-13 修正）。
+  // mode/view/live 等の画面状態がURLに乗るようになったため、パスだけ渡すと
+  // 合言葉入力後に共有URLの画面状態が失われる（常にトップへ戻ってしまう）
   const url = req.nextUrl.clone();
+  const search = req.nextUrl.search; // "?a=b&c=d" または ""
   url.pathname = "/gate";
-  url.searchParams.set("next", pathname);
+  url.search = "";
+  url.searchParams.set("next", pathname + search);
   return NextResponse.redirect(url);
 }
 

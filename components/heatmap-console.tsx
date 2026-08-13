@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import HeatMap from "./heat-map";
 import HourlyStrip from "./hourly-strip";
 import VenueMap from "./venue-map";
@@ -8,7 +9,7 @@ import { INK } from "@/lib/forecast/scales";
 import { TIME_BANDS } from "@/lib/forecast/risk";
 import { daylightWindow } from "@/lib/forecast/solar";
 import type { HeatConditions } from "@/lib/forecast/heatfield";
-import type { Scenario, Weather } from "@/lib/forecast/types";
+import type { EventDate, Scenario, VenueGeo, Weather } from "@/lib/forecast/types";
 import { DEFAULT_SCENARIO, VENUE } from "@/lib/forecast/venue";
 
 /**
@@ -22,6 +23,12 @@ import { DEFAULT_SCENARIO, VENUE } from "@/lib/forecast/venue";
  * 2つの見え方を同じ条件で切り替える:
  *  - リスク予報 … ゾーン単位。色は「危険帯に入るまでの残り時間」（本体マップと同じ部品）
  *  - 連続場     … 8px格子のWBGT。日陰・地表面・風下の淀みまで見える精細版
+ *
+ * 2026-08-13、**初期条件をURLクエリから受け取る**ようにした（棚卸しF）。
+ * 「全画面で見る ↗」を押したとき、直前まで見ていた条件と違う地図が出るのは
+ * 予報プロダクトとして事故なので、遷移元（予報コンソール）が現在の Scenario を
+ * クエリに載せて渡す。クエリが無ければ従来どおり DEFAULT_SCENARIO。
+ * 受け取り側では値を必ず検証する（NaN・範囲外をそのまま太陽位置やWBGTに流さない）。
  */
 
 const WEATHER: [Weather, string][] = [
@@ -38,9 +45,80 @@ const TZ_OFFSET_HOURS = 9;
 
 type View = "risk" | "field";
 
+/** URLクエリの読み手。`ReadonlyURLSearchParams` も `URLSearchParams` も満たす最小形 */
+type Query = { get(key: string): string | null };
+
+/**
+ * 数値クエリの検証。欠落・数値でない・範囲外はすべて既定値へ。
+ * step を渡すとスライダーの刻みに丸める（範囲外の値を計算に流さないのが主目的）
+ */
+function readNum(raw: string | null, min: number, max: number, fallback: number, step = 1): number {
+  if (raw === null || raw.trim() === "") return fallback;
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v < min || v > max) return fallback;
+  return Math.round(v / step) * step;
+}
+
+/** `YYYY-M-D`。実在しない日付（2/30 等）は既定値へ倒す */
+function readDate(raw: string | null, fallback: EventDate): EventDate {
+  if (!raw) return fallback;
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(raw.trim());
+  if (!m) return fallback;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const probe = new Date(Date.UTC(y, mo - 1, d));
+  if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) {
+    return fallback;
+  }
+  // 既定日と同じなら既定のラベル（「8/8 真夏」）を保つ。自由文はURLに載せない
+  const same = y === fallback.y && mo === fallback.mo && d === fallback.d;
+  return { y, mo, d, label: same ? fallback.label : `${mo}/${d}` };
+}
+
+/**
+ * 緯度経度は**対で**検証する。片方でも壊れていれば地名ごと既定値へ倒す
+ * （座標だけ大阪・地名は「東京」という取り違えを作らない）
+ */
+function readGeo(
+  lat: string | null,
+  lon: string | null,
+  place: string | null,
+  fallback: VenueGeo
+): VenueGeo {
+  // 空文字は Number("")===0 で「範囲内の緯度経度0,0（ギニア湾）」に化けるので先に弾く
+  if (lat === null || lon === null || lat.trim() === "" || lon.trim() === "") return fallback;
+  const la = Number(lat);
+  const lo = Number(lon);
+  if (!Number.isFinite(la) || !Number.isFinite(lo)) return fallback;
+  if (Math.abs(la) > 90 || Math.abs(lo) > 180) return fallback;
+  // 表示にしか使わないが、制御文字を落として長さを切る
+  const name = (place ?? "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 24);
+  return { name: name || "指定地点", lat: la, lon: lo };
+}
+
+/** クエリ → Scenario。範囲はこのページのスライダーの min/max と一致させている */
+function readScenario(q: Query): Scenario {
+  const d = DEFAULT_SCENARIO;
+  const w = q.get("weather");
+  return {
+    weather: WEATHER.some(([k]) => k === w) ? (w as Weather) : d.weather,
+    temp: readNum(q.get("temp"), 20, 40, d.temp),
+    rhPct: readNum(q.get("rh"), 30, 95, d.rhPct),
+    windMs: readNum(q.get("wind"), 0, 12, d.windMs, 0.5),
+    tickets: readNum(q.get("tickets"), 2000, 60000, d.tickets, 1000),
+    date: readDate(q.get("date"), d.date),
+    geo: readGeo(q.get("lat"), q.get("lon"), q.get("place"), d.geo),
+  };
+}
+
 export default function HeatmapConsole() {
-  const [scenario, setScenario] = useState<Scenario>(DEFAULT_SCENARIO);
-  const [hour, setHour] = useState(15);
+  // 遷移元（予報コンソール）の条件を初期値として受け取る。以後はこのページで自由に動かせる
+  const params = useSearchParams();
+  const [scenario, setScenario] = useState<Scenario>(() => readScenario(params));
+  const [hour, setHour] = useState(() =>
+    readNum(params.get("hour"), VENUE.open, VENUE.close, 15)
+  );
   const [view, setView] = useState<View>("risk");
   // 風向だけは Scenario に無い（本体は風速しか使わない）。連続場の移流計算のために持つ
   const [windFromDeg, setWindFromDeg] = useState(180);
