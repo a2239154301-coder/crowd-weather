@@ -18,7 +18,8 @@ export const DAY = {
   line: "#C9D2E4",
   text: "#0B111F",
   textDim: "#4A5670",
-  textFaint: "#6C7891",
+  /** コントラスト実測: 白地5.72:1・page地5.05:1（AA本文4.5:1を確保。#6C7891は4.44:1で未達だった） */
+  textFaint: "#5A6685",
   /** 危険・警告の強調（明色地でコントラストが立つ濃赤） */
   danger: "#B3123A",
 } as const;
