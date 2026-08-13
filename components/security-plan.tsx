@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import type { DayPlan, Scenario } from "@/lib/forecast/types";
 import { zonesFor } from "@/lib/forecast/venue";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
+import { STAFFING_REFERENCE } from "@/lib/ops/staffing";
 import VenueMap, { type StaffMark } from "./venue-map";
 import SourceTag from "./source-tag";
 
@@ -156,6 +157,16 @@ export default function SecurityPlan({
   .maps svg { width: 100%; height: auto; border-radius: 6px; }
   .summary { border: 1px solid #ccc; border-radius: 8px; padding: 12px 14px;
              font-size: 12.5px; white-space: pre-wrap; margin-bottom: 16px; }
+  .ref { margin-bottom: 16px; }
+  .ref h2 { font-size: 13.5px; margin: 0 0 2px; }
+  .ref .lead { font-size: 11px; color: #555; margin: 0 0 10px; }
+  .ref .groups { display: flex; gap: 18px; flex-wrap: wrap; }
+  .ref .group { flex: 1; min-width: 200px; }
+  .ref .group-title { font-size: 11.5px; font-weight: 600; color: #555; margin-bottom: 4px; }
+  .ref table { margin-bottom: 4px; }
+  .ref td { padding: 4px 0; border-top: 1px solid #eee; }
+  .ref td:last-child { text-align: right; }
+  .ref .note { font-size: 10.5px; color: #777; }
   .foot { font-size: 10px; color: #777; margin-top: 18px;
           border-top: 1px solid #ddd; padding-top: 8px; }
   @media print { body { margin: 12mm; } }
@@ -165,6 +176,7 @@ export default function SecurityPlan({
 ${summary ? `<div class="summary"><b>総括</b>\n${summary.replace(/</g, "&lt;")}</div>` : ""}
 ${tableHtml(rows)}
 <div class="maps">${mapsHtml(node)}</div>
+${referenceHtml()}
 <div class="foot">予測は CROWD WEATHER の決定的計算エンジン（混雑指数・NOAA太陽位置・WBGT物理式）による。
 総括文はAI起草${summaryMeta ? `（${summaryMeta.servedModel}）` : ""}・数値はすべて計算エンジンの出力値。DEMO DATA — 実在会場の実配置ではありません。</div>
 <script>window.onload = () => window.print();</script>
@@ -310,10 +322,11 @@ ${tableHtml(rows)}
               staff={staff}
               compact
             />
-            <div style={{ display: "flex", gap: 14, marginTop: 9, fontSize: 13, color: INK.textDim }}>
+            <div style={{ display: "flex", gap: 14, marginTop: 9, fontSize: 13, color: INK.textDim, flexWrap: "wrap" }}>
               <LegendDot color="#38BDF8" label="給水" />
               <LegendDot color="#FDE047" label="誘導" />
               <LegendDot color="#22C55E" label="救護" />
+              <LegendDot color="#C4B5FD" label="受付" />
               <span style={{ marginLeft: "auto", color: INK.textFaint }}>
                 最混雑 {densityBand(plan.peakDensity).label}
               </span>
@@ -335,6 +348,46 @@ ${tableHtml(rows)}
         </div>
       </div>
 
+      <div
+        data-plan-reference
+        style={{
+          marginTop: 20,
+          paddingTop: 16,
+          borderTop: `1px solid ${INK.line}`,
+        }}
+      >
+        <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: INK.text }}>
+          人員規模の実務参照（注記）
+        </h3>
+        <p style={{ margin: "0 0 12px", fontSize: 13, color: INK.textDim, lineHeight: 1.75 }}>
+          上の配置計画は予報からの算出値。実務では以下の人数感を目安に、混み具合を見て兼任・増減する（現場ヒアリング 2026-08）
+        </p>
+        <div style={{ display: "grid", gap: 14, gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>
+          {STAFFING_REFERENCE.map((g) => (
+            <div key={g.group}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: INK.textFaint, marginBottom: 5 }}>
+                {g.group}
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <tbody>
+                  {g.items.map((it) => (
+                    <tr key={it.label} style={{ borderTop: `1px solid ${INK.hairline}` }}>
+                      <td style={{ padding: "6px 12px 6px 0", color: INK.text }}>{it.label}</td>
+                      <td style={{ padding: "6px 0", color: INK.text, textAlign: "right" }} className="cw-mono">
+                        {it.count}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {g.note && (
+                <div style={{ marginTop: 4, fontSize: 13, color: INK.textFaint }}>{g.note}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
       <p style={{ marginTop: 16, marginBottom: 0, fontSize: 13, color: INK.textFaint, lineHeight: 1.75 }}>
         「印刷 / PDF保存」で手元にファイルが残る（ブラウザの印刷機能を使用）。
         会場ごとの実績を学習し、2会場目以降の初期設定コストを下げる。
@@ -349,6 +402,25 @@ function tableHtml(rows: [string, string][]): string {
   return `<table>${rows
     .map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`)
     .join("")}</table>`;
+}
+
+/** 印刷用: 人員規模の実務参照（STAFFING_REFERENCE）のHTMLを組み立てる */
+function referenceHtml(): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const groups = STAFFING_REFERENCE.map(
+    (g) => `<div class="group">
+      <div class="group-title">${esc(g.group)}</div>
+      <table><tbody>${g.items
+        .map((it) => `<tr><td>${esc(it.label)}</td><td>${esc(it.count)}</td></tr>`)
+        .join("")}</tbody></table>
+      ${g.note ? `<div class="note">${esc(g.note)}</div>` : ""}
+    </div>`
+  ).join("");
+  return `<div class="ref">
+    <h2>人員規模の実務参照（注記）</h2>
+    <p class="lead">上の配置計画は予報からの算出値。実務では以下の人数感を目安に、混み具合を見て兼任・増減する（現場ヒアリング 2026-08）</p>
+    <div class="groups">${groups}</div>
+  </div>`;
 }
 
 /** 印刷用: 画面に描画済みの会場図SVGを複製する */

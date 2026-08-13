@@ -18,7 +18,7 @@ import { centroid } from "@/lib/forecast/model";
  * 推奨人数が変わり、ポストの数も変わる（計画がそのまま名簿になる）。
  */
 
-export type PostRole = "water" | "guide" | "aid";
+export type PostRole = "water" | "guide" | "aid" | "reception";
 
 export type Post = {
   /** ポストコード。エリア記号-連番（例 A-1） */
@@ -34,6 +34,7 @@ export const ROLE_LABEL: Record<PostRole, string> = {
   water: "給水",
   guide: "誘導",
   aid: "救護",
+  reception: "受付",
 };
 
 /**
@@ -60,7 +61,7 @@ export const AREA_CODE: Record<string, string> = {
  * 人数の根拠は `dayPlan()` の water/guide/aid。同じ入力なら必ず同じポスト列になる
  * （コードの安定性が大事: 指示は「A-2へ」の形で飛ぶので、再計算でコードがズレると事故）。
  */
-export function postsFor(plan: DayPlan): Post[] {
+export function postsFor(plan: DayPlan, opts?: { reception?: boolean }): Post[] {
   const inside = zonesFor("in");
   const posts: Post[] = [];
   const counters: Record<string, number> = {};
@@ -97,13 +98,67 @@ export function postsFor(plan: DayPlan): Post[] {
   put("aid", "aid", Math.min(2, plan.aid));
   if (plan.aid > 2) put("aid", "aid", plan.aid - 2);
 
+  /**
+   * 受付・手荷物検査ポスト（2026-08-13 現場ヒアリングに基づき追加）。
+   * 西ゲート(wg)・東ゲート(eg) に4人ずつ、計8人（実務値「受付・荷物チェック8-10人」の下限）。
+   *
+   * **固定接頭辞 `R` で採番する（R-1〜R-8）。AREA_CODE（A/B等）には相乗りしない**:
+   * wg/eg は上の guide のオーバーフロー配置先でもあり、チケット数が変わるとその連番が動く。
+   * 受付をA/B系の採番に混ぜると、既存コードがズレて着任済みスタッフが孤児化する
+   * （現場の無線・掲示のコードと実配置が食い違う）。R系を完全に独立させておけば、
+   * 受付の有無に関わらず既存ポスト列（A〜J系）は一切変わらない。
+   */
+  if (opts?.reception ?? true) {
+    putReceptionRow(inside, posts, "wg", 1);
+    putReceptionRow(inside, posts, "eg", 5);
+  }
+
   return posts;
+}
+
+/**
+ * 受付ポストを4人、1ゾーンに配置する（`R-{from}`〜`R-{from+3}`）。
+ * ゾーン centroid から y+30 の行に34px間隔で横並び（既存ポストの y+26 の行とは
+ * 縦にずらし、見た目の重なりを避ける）。
+ */
+function putReceptionRow(inside: Zone[], posts: Post[], zoneId: string, from: number): void {
+  const z = inside.find((v) => v.id === zoneId);
+  if (!z) return;
+  const c = z.label ?? centroid(z.shape);
+  const n = 4;
+  for (let i = 0; i < n; i++) {
+    posts.push({
+      code: `R-${from + i}`,
+      zoneId,
+      zoneName: z.name,
+      at: { x: c.x + (i - (n - 1) / 2) * 34, y: c.y + 30 },
+      role: "reception",
+    });
+  }
 }
 
 /** 地図表示用の互換変換（VenueMap の StaffMark と同じ形）。ラベルにポストコードを載せる */
 export function postsToMarks(posts: Post[]): { at: Point; role: PostRole; label: string }[] {
   return posts.map((p) => ({ at: p.at, role: p.role, label: p.code }));
 }
+
+/** 現場実務の人数感（2026-08-13 現場ヒアリング）。計算値ではなく参照値（計画書の注記に使う） */
+export const STAFFING_REFERENCE: { group: string; items: { label: string; count: string }[]; note?: string }[] = [
+  { group: "通常スタッフ（15人目安）", items: [
+    { label: "ディレクター", count: "1-3" },
+    { label: "メインステージ", count: "5" },
+    { label: "フード", count: "3" },
+    { label: "サブステージ", count: "3" },
+    { label: "その他", count: "1-2" },
+  ], note: "混み具合を見て兼任あり" },
+  { group: "受付・荷物チェックがある場合", items: [
+    { label: "受付・手荷物検査", count: "+8-10" },
+  ] },
+  { group: "場外まで含める場合（+8-10人）", items: [
+    { label: "駐車場", count: "3-5" },
+    { label: "駅誘導・出入口誘導", count: "残り" },
+  ], note: "会場の立地で大きく変わる" },
+];
 
 /** ゾーンIDの実在チェック（AI提案の検証・APIの入力検証で使う） */
 export function isValidZoneId(zoneId: string): boolean {

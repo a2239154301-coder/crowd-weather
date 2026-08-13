@@ -6,6 +6,7 @@ import { VENUE } from "@/lib/forecast/venue";
 import { centroid, forecastZones, shadowsAt, sunAt, toPath } from "@/lib/forecast/model";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
 import { riskLabel, timeBand, zoneRisks, type ZoneRisk } from "@/lib/forecast/risk";
+import type { PostRole } from "@/lib/ops/staffing";
 
 /**
  * `risk` = 総合リスク予報（2026-08-12 追加）。色が「いまの値」ではなく
@@ -13,7 +14,8 @@ import { riskLabel, timeBand, zoneRisks, type ZoneRisk } from "@/lib/forecast/ri
  */
 export type MapLayer = "crowd" | "heat" | "risk";
 
-export type StaffMark = { at: Point; role: "water" | "guide" | "aid"; label: string };
+/** role は staffing.ts の PostRole をそのまま使う（二重管理にしない） */
+export type StaffMark = { at: Point; role: PostRole; label: string };
 
 /**
  * 地面と建物の明度（2026-08-12 引き上げ）。
@@ -72,8 +74,9 @@ const ROLE_COLOR: Record<StaffMark["role"], string> = {
   water: "#38BDF8",
   guide: "#FDE047",
   aid: "#22C55E",
+  reception: "#C4B5FD",
 };
-const ROLE_GLYPH: Record<StaffMark["role"], string> = { water: "水", guide: "誘", aid: "救" };
+const ROLE_GLYPH: Record<StaffMark["role"], string> = { water: "水", guide: "誘", aid: "救", reception: "受" };
 
 type Props = {
   zones: Zone[];
