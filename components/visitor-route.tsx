@@ -1,20 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Scenario } from "@/lib/forecast/types";
 import { VENUE, zonesFor } from "@/lib/forecast/venue";
-import { toPath, shadowsAt, sunAt } from "@/lib/forecast/model";
+import { forecastZones, toPath, shadowsAt, sunAt } from "@/lib/forecast/model";
 import { anchorOf, destinationsFor, findRoute, type RoutePreference } from "@/lib/forecast/route";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
+import { evidencePlain } from "@/lib/forecast/evidence";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
+import { useScenario } from "@/lib/ui/scenario-context";
+import { DAY } from "@/lib/ui/day-theme";
+import SourceTag from "./source-tag";
+import VenueMap from "./venue-map";
 
 /**
  * 来場者向けルート案内（馬場氏の要望「救護・給水までのルートをAIで算出して示せたら」）。
+ * 2026-08-13、白基調・スナップショット方式に全面改修。
  *
  * ⚠ **経路探索はLLMではなく決定的な計算**（lib/forecast/route.ts のダイクストラ法）。
  * 安全に関わる案内で毎回違う答えが返ってはいけないこと、数msで出る処理に
  * 数秒かけたくないこと、そして「計算にLLMを使わない」という本製品の設計方針による。
  * LLMは出た経路を一言で説明するところにだけ使う（やさしい日本語・軽量モデル）。
+ *
+ * **スナップショット方式**: 管理者が予報コンソールでシナリオや時刻を動かしても、
+ * 来場者が見ている情報が勝手に変わってはいけない（馬場氏指摘）。
+ * 「情報を取り込む」を押した瞬間の条件・実時刻だけを固定して使う。
+ * `useScenario()` から取るのは最新のシナリオそのものではなく、
+ * スナップショットを取り直すための「素材」でしかない。
  */
 
 const PREFERENCES: { key: RoutePreference; label: string; hint: string }[] = [
@@ -23,9 +35,11 @@ const PREFERENCES: { key: RoutePreference; label: string; hint: string }[] = [
   { key: "short", label: "とにかく近い", hint: "最短距離" },
 ];
 
-type Props = { scenario: Scenario; hour: number };
+type Snapshot = { scenario: Scenario; hour: number; label: string };
+type RouteQuery = { fromId: string; toId: string; pref: RoutePreference };
 
-export default function VisitorRoute({ scenario, hour }: Props) {
+export default function VisitorRoute() {
+  const { scenario } = useScenario();
   const zones = useMemo(() => zonesFor("in"), []);
   const destinations = useMemo(() => destinationsFor(zones), [zones]);
 
@@ -41,13 +55,42 @@ export default function VisitorRoute({ scenario, hour }: Props) {
     return zones.map((z) => [z.id, friendly.get(z.id) ?? z.name]);
   }, [zones, destinations]);
 
+  // ── ①情報のスナップショット ─────────────────────────────────
+  const [snap, setSnap] = useState<Snapshot | null>(null);
+  const take = useCallback(() => {
+    const d = new Date();
+    const h = Math.max(VENUE.open, Math.min(VENUE.close, d.getHours()));
+    setSnap({ scenario, hour: h, label: `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}` });
+  }, [scenario]);
+  useEffect(() => {
+    take();
+    // 初回のみ自動取得。以降は「情報を取り込む」ボタンでのみ更新する
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── ②混雑エリア一覧（電車の混雑アプリ式） ──────────────────────
+  const crowded = useMemo(() => {
+    if (!snap) return [];
+    return forecastZones(VENUE.zones, snap.hour, snap.scenario)
+      .filter((f) => f.density >= 80)
+      .sort((a, b) => b.density - a.density);
+  }, [snap]);
+
+  // ── ④経路探索（既存ロジックを流用） ────────────────────────────
   const [fromId, setFromId] = useState("main");
   const [toId, setToId] = useState(destinations[0]?.zone.id ?? "aid");
   const [pref, setPref] = useState<RoutePreference>("safe");
+  // 選んだだけでは検索しない。「この内容で探す」を押した内容だけを確定させる
+  const [query, setQuery] = useState<RouteQuery | null>(null);
 
-  // ── 自由文での問い合わせ ───────────────────────────────────────
+  const search = useCallback(() => {
+    if (!snap) return;
+    setQuery({ fromId, toId, pref });
+  }, [snap, fromId, toId, pref]);
+
+  // ── 自由文での問い合わせ（補助） ─────────────────────────────
   // LLMは「言い方 → 出発地・行き先・優先条件」の翻訳だけを行い、
-  // 経路そのものは下の findRoute（ダイクストラ法）が決定的に計算する。
+  // 経路そのものは findRoute（ダイクストラ法）が決定的に計算する。
   // 解釈は必ず画面に出す。安全案内で解釈がブラックボックスだと、
   // 目的地を取り違えても来場者が気づけない。
   const [ask, setAsk] = useState("");
@@ -78,28 +121,32 @@ export default function VisitorRoute({ scenario, hour }: Props) {
         setIntent({ ok: false, text: r.interpretation });
         return;
       }
+      const nextFrom = r.fromId ?? fromId;
+      const nextTo = r.toId ?? toId;
+      const nextPref = r.preference ?? pref;
       if (r.fromId) setFromId(r.fromId);
       if (r.toId) setToId(r.toId);
       if (r.preference) setPref(r.preference);
       setIntent({ ok: true, text: r.interpretation });
       setNote("");
+      setQuery({ fromId: nextFrom, toId: nextTo, pref: nextPref });
     } catch {
-      setIntent({ ok: false, text: "うまく聞き取れませんでした。下の項目から選んでください。" });
+      setIntent({ ok: false, text: "うまく聞き取れませんでした。上の項目から選んでください。" });
     } finally {
       setAskBusy(false);
     }
   }
 
-  const route = useMemo(
-    () => findRoute(zones, fromId, toId, hour, scenario, pref),
-    [zones, fromId, toId, hour, scenario, pref]
-  );
+  const route = useMemo(() => {
+    if (!snap || !query) return null;
+    return findRoute(zones, query.fromId, query.toId, snap.hour, snap.scenario, query.pref);
+  }, [zones, snap, query]);
 
   const shadows = useMemo(
-    () => shadowsAt(hour, scenario.date, scenario.geo),
-    [hour, scenario.date, scenario.geo]
+    () => (snap ? shadowsAt(snap.hour, snap.scenario.date, snap.scenario.geo) : []),
+    [snap]
   );
-  const night = sunAt(hour, scenario.date, scenario.geo).altitudeDeg <= 3;
+  const night = snap ? sunAt(snap.hour, snap.scenario.date, snap.scenario.geo).altitudeDeg <= 3 : false;
 
   // AI説明（任意）。経路が出てから押す。数値は計算結果をそのまま渡す
   const [note, setNote] = useState("");
@@ -108,7 +155,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
   const [noteYen, setNoteYen] = useState<number | null>(null);
 
   async function explain() {
-    if (!route || noteBusy) return;
+    if (!route || !snap || !query || noteBusy) return;
     setNoteBusy(true);
     setNote("");
     try {
@@ -127,8 +174,8 @@ export default function VisitorRoute({ scenario, hour }: Props) {
             経路上の最大混雑指数: route.maxDensity,
             経路上の最大WBGT: route.maxWbgt,
             日陰率パーセント: Math.round(route.shadeRatio * 100),
-            時刻: `${hour}:00`,
-            優先条件: PREFERENCES.find((p) => p.key === pref)?.label,
+            時刻: `${snap.hour}:00`,
+            優先条件: PREFERENCES.find((p) => p.key === query.pref)?.label,
           },
         }),
       });
@@ -148,155 +195,222 @@ export default function VisitorRoute({ scenario, hour }: Props) {
 
   return (
     <section style={{ display: "grid", gap: 12 }}>
+      {/* ヘッダ */}
       <div
         style={{
-          background: INK.surface,
-          border: `1px solid ${INK.line}`,
+          background: DAY.surface,
+          border: `1px solid ${DAY.line}`,
           borderRadius: 14,
           padding: 16,
         }}
       >
-        <div className="cw-mono" style={{ fontSize: 13, letterSpacing: 1.5, color: INK.textFaint }}>
-          SAFE ROUTE ── 言葉で聞ける会場の道案内
-        </div>
-        <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>
-          いちばん近い道が、いちばん安全とはかぎらない。
-        </div>
-        <div style={{ fontSize: 13, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
-          AIが使われるのは<b style={{ color: INK.text }}>言葉を条件に翻訳するところと、結果を言葉にするところ</b>だけ。
-          <b style={{ color: INK.text }}>経路そのものの計算にAIは使っていません</b>
-          （毎回同じ答えが出る必要があるため）。翻訳した条件は必ず画面に出すので、
-          違っていればその場で直せます。
-        </div>
-
-        {/* 自由文での問い合わせ。解釈結果は下の項目に反映され、その場で直せる */}
-        <div style={{ display: "flex", gap: 8, marginTop: 13, flexWrap: "wrap" }}>
-          <input
-            value={ask}
-            onChange={(e) => setAsk(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submitAsk()}
-            placeholder="例）日陰を通って救護所に行きたい／トイレ、混んでないところ"
-            aria-label="行きたい場所を自由に入力"
-            style={{
-              flex: "1 1 260px",
-              minHeight: 48,
-              padding: "0 14px",
-              borderRadius: 11,
-              border: `1px solid ${INK.line}`,
-              background: INK.raised,
-              color: INK.text,
-              fontSize: 15,
-            }}
-          />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <div className="cw-mono" style={{ fontSize: 13, letterSpacing: 1.5, color: DAY.textFaint }}>
+              SAFE ROUTE — いま混んでいる場所と、安全な道
+            </div>
+            <div style={{ fontSize: 13, color: DAY.textDim, marginTop: 4 }}>
+              {snap ? `${snap.label} 時点の情報` : "情報を取得中…"}
+            </div>
+          </div>
           <button
-            onClick={submitAsk}
-            disabled={askBusy}
+            onClick={take}
             style={{
               minHeight: 48,
-              padding: "0 22px",
+              padding: "0 20px",
               borderRadius: 11,
               border: "none",
-              background: askBusy ? INK.raised : INK.accent,
-              color: askBusy ? INK.textDim : INK.page,
+              background: DAY.text,
+              color: "#FFFFFF",
               fontWeight: 700,
               fontSize: 15,
-              cursor: askBusy ? "wait" : "pointer",
+              cursor: "pointer",
               whiteSpace: "nowrap",
             }}
           >
-            {askBusy ? "聞き取り中…" : "この内容で探す"}
+            情報を取り込む
           </button>
         </div>
+      </div>
 
-        {intent && (
-          <div
-            role="status"
-            style={{
-              marginTop: 10,
-              padding: "11px 13px",
-              borderRadius: 10,
-              fontSize: 15,
-              lineHeight: 1.7,
-              background: INK.raised,
-              border: `1px solid ${intent.ok ? INK.accent : "#FB7A1E"}55`,
-              color: INK.text,
-            }}
-          >
-            <span style={{ color: INK.textDim }}>{intent.ok ? "こう解釈しました：" : "解釈できませんでした："}</span>{" "}
-            {intent.text}
-            {intent.ok && (
-              <div style={{ fontSize: 13, color: INK.textFaint, marginTop: 5 }}>
-                違っていたら下の項目で直せます。経路の計算はこの解釈が確定してから行います。
+      {/* 混雑エリア一覧 */}
+      <div
+        style={{
+          background: DAY.surface,
+          border: `1px solid ${DAY.line}`,
+          borderRadius: 14,
+          padding: 16,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: DAY.text }}>いま混んでいる場所</div>
+          <SourceTag kind="calc" tone="day" />
+        </div>
+        <p style={{ margin: "6px 0 0", fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
+          電車の混雑アプリのように、混雑指数80以上のエリアだけを並べています。
+          避けるかどうかは、これを見てご自身で判断してください。
+        </p>
+        <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+          {!snap ? (
+            <div style={{ fontSize: 13, color: DAY.textFaint }}>情報を取得中…</div>
+          ) : crowded.length === 0 ? (
+            <div style={{ fontSize: 15, color: DAY.textDim }}>いま、混雑80以上のエリアはありません</div>
+          ) : (
+            crowded.map((f) => (
+              <div
+                key={f.zone.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "9px 11px",
+                  background: DAY.page,
+                  borderRadius: 10,
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{ width: 11, height: 11, borderRadius: 999, background: densityBand(f.density).color, flex: "none" }}
+                />
+                <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: DAY.text }}>{f.zone.name}</span>
+                <span className="cw-mono" style={{ fontSize: 15, fontWeight: 700, color: DAY.text }}>
+                  {f.density}
+                </span>
+                <span style={{ fontSize: 13, color: DAY.textDim }}>{evidencePlain(f.zone.kind, f.density)}</span>
               </div>
-            )}
-          </div>
-        )}
+            ))
+          )}
+        </div>
+      </div>
 
-        {/* 入力（自由文の解釈結果がここに反映される） */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-            gap: 10,
-            marginTop: 13,
-          }}
-        >
-          <Labeled label="いまいる場所">
+      {/* 会場マップ */}
+      <div
+        style={{
+          background: DAY.surface,
+          border: `1px solid ${DAY.line}`,
+          borderRadius: 14,
+          padding: 12,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 700, color: DAY.textDim, marginBottom: 8, padding: "0 4px" }}>
+          会場マップ（混雑）
+        </div>
+        {snap ? (
+          <VenueMap zones={VENUE.zones} hour={snap.hour} scenario={snap.scenario} layer="crowd" compact />
+        ) : (
+          <div style={{ fontSize: 13, color: DAY.textFaint, padding: "0 4px" }}>情報を取得中…</div>
+        )}
+      </div>
+
+      {/* 経路探索（一本導線） */}
+      <div
+        style={{
+          background: DAY.surface,
+          border: `1px solid ${DAY.line}`,
+          borderRadius: 14,
+          padding: 16,
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 15, color: DAY.text }}>安全な道を探す</div>
+        <p style={{ margin: "4px 0 12px", fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
+          経路の計算にAIは使っていません（毎回同じ答えが出る決定的な計算です）。
+        </p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+          <Labeled label="① いまいる場所">
             <Select value={fromId} onChange={setFromId} options={zones.map((z) => [z.id, z.name])} />
           </Labeled>
-          <Labeled label="行き先">
+          <Labeled label="② 行き先">
             <Select value={toId} onChange={setToId} options={destinationOptions} />
           </Labeled>
         </div>
 
-        <div style={{ display: "flex", gap: 6, marginTop: 11, flexWrap: "wrap" }}>
-          {PREFERENCES.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPref(p.key)}
-              aria-pressed={pref === p.key}
-              style={{
-                flex: "1 1 130px",
-                padding: "9px 10px",
-                borderRadius: 10,
-                border: `1px solid ${pref === p.key ? INK.accent : INK.line}`,
-                background: pref === p.key ? INK.accent : "transparent",
-                color: pref === p.key ? INK.page : INK.textDim,
-                cursor: "pointer",
-                fontWeight: 700,
-                fontSize: 13,
-                lineHeight: 1.4,
-              }}
-            >
-              {p.label}
-              <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.8 }}>{p.hint}</div>
-            </button>
-          ))}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 13, color: DAY.textDim, marginBottom: 6 }}>③ 条件</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {PREFERENCES.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setPref(p.key)}
+                aria-pressed={pref === p.key}
+                style={{
+                  flex: "1 1 130px",
+                  minHeight: 48,
+                  padding: "9px 10px",
+                  borderRadius: 10,
+                  border: `1px solid ${pref === p.key ? DAY.text : DAY.line}`,
+                  background: pref === p.key ? DAY.text : DAY.surface,
+                  color: pref === p.key ? "#FFFFFF" : DAY.text,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  lineHeight: 1.4,
+                }}
+              >
+                {p.label}
+                <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.85 }}>{p.hint}</div>
+              </button>
+            ))}
+          </div>
         </div>
+
+        <button
+          onClick={search}
+          disabled={!snap}
+          style={{
+            marginTop: 14,
+            width: "100%",
+            minHeight: 48,
+            padding: "0 22px",
+            borderRadius: 11,
+            border: "none",
+            background: snap ? DAY.text : DAY.line,
+            color: "#FFFFFF",
+            fontWeight: 700,
+            fontSize: 15,
+            cursor: snap ? "pointer" : "not-allowed",
+          }}
+        >
+          ④ この内容で探す
+        </button>
+
+        {!query && (
+          <div style={{ marginTop: 10, fontSize: 13, color: DAY.textFaint }}>
+            条件を選んで「この内容で探す」を押すと、ここに経路が表示されます。
+          </div>
+        )}
       </div>
 
-      {!route && (
+      {query && !route && (
         <div
           style={{
-            background: INK.surface,
-            border: `1px dashed ${INK.line}`,
+            background: DAY.surface,
+            border: `1px dashed ${DAY.line}`,
             borderRadius: 14,
             padding: 16,
             fontSize: 13,
-            color: INK.textDim,
+            color: DAY.textDim,
           }}
         >
           この2地点をつなぐ道が見つかりませんでした。別の場所を選んでください。
         </div>
       )}
 
-      {route && (
+      {query && route && (
         <div className="cw-split" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: 12 }}>
-          {/* 地図＋経路 */}
+          {/* 地図＋経路（安全案内の主役なので、既存の暗色SVGのまま） */}
           <div
             style={{
-              background: INK.surface,
-              border: `1px solid ${INK.line}`,
+              background: DAY.surface,
+              border: `1px solid ${DAY.line}`,
               borderRadius: 14,
               padding: 12,
             }}
@@ -395,24 +509,22 @@ export default function VisitorRoute({ scenario, hour }: Props) {
           <aside style={{ display: "grid", gap: 12, alignContent: "start" }}>
             <div
               style={{
-                background: INK.surface,
-                border: `1px solid ${INK.line}`,
+                background: DAY.surface,
+                border: `1px solid ${DAY.line}`,
                 borderRadius: 14,
                 padding: 15,
               }}
             >
-              <div className="cw-mono" style={{ fontSize: 26, fontWeight: 700, color: INK.text }}>
+              <div className="cw-mono" style={{ fontSize: 26, fontWeight: 700, color: DAY.text }}>
                 徒歩 約{route.minutes}分
-                <span style={{ fontSize: 13, color: INK.textDim, fontWeight: 400 }}> / {route.meters}m</span>
+                <span style={{ fontSize: 13, color: DAY.textDim, fontWeight: 400 }}> / {route.meters}m</span>
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
                 <Chip color={densityBand(route.maxDensity).color}>
                   いちばん混む所 {densityBand(route.maxDensity).label}
                 </Chip>
-                <Chip color={wbgtBand(route.maxWbgt).color}>
-                  暑さ {wbgtBand(route.maxWbgt).label}
-                </Chip>
-                <Chip color="#7DD3FC">日陰 {Math.round(route.shadeRatio * 100)}%</Chip>
+                <Chip color={wbgtBand(route.maxWbgt).color}>暑さ {wbgtBand(route.maxWbgt).label}</Chip>
+                <Chip color="#38BDF8">日陰 {Math.round(route.shadeRatio * 100)}%</Chip>
               </div>
 
               {route.warnings.map((w, i) => (
@@ -422,10 +534,10 @@ export default function VisitorRoute({ scenario, hour }: Props) {
                   style={{
                     marginTop: 10,
                     padding: "10px 12px",
-                    borderRadius: 10,
+                    borderRadius: "0 10px 10px 0",
                     background: "#FB7A1E14",
-                    border: "1px solid #FB7A1E55",
-                    color: "#FDBA74",
+                    borderLeft: "5px solid #FB7A1E",
+                    color: DAY.text,
                     fontSize: 13,
                     lineHeight: 1.7,
                   }}
@@ -436,13 +548,13 @@ export default function VisitorRoute({ scenario, hour }: Props) {
 
               <ol style={{ margin: "13px 0 0", paddingLeft: 0, listStyle: "none", display: "grid", gap: 7 }}>
                 {route.steps.map((s, i) => (
-                  <li key={s.zone.id} style={{ display: "flex", gap: 9, alignItems: "baseline" }}>
+                  <li key={s.zone.id} style={{ display: "flex", gap: 9, alignItems: "center" }}>
                     <span
                       className="cw-mono"
                       style={{
                         fontSize: 13,
-                        color: INK.textFaint,
-                        border: `1px solid ${INK.line}`,
+                        color: DAY.textFaint,
+                        border: `1px solid ${DAY.line}`,
                         borderRadius: 999,
                         minWidth: 18,
                         textAlign: "center",
@@ -450,14 +562,15 @@ export default function VisitorRoute({ scenario, hour }: Props) {
                     >
                       {i + 1}
                     </span>
-                    <span style={{ flex: 1, fontSize: 13 }}>{s.zone.name}</span>
                     <span
-                      className="cw-mono"
-                      style={{ fontSize: 13, color: densityBand(s.density).color }}
-                    >
+                      aria-hidden
+                      style={{ width: 9, height: 9, borderRadius: 999, background: densityBand(s.density).color, flex: "none" }}
+                    />
+                    <span style={{ flex: 1, fontSize: 13, color: DAY.text }}>{s.zone.name}</span>
+                    <span className="cw-mono" style={{ fontSize: 13, color: DAY.textDim }}>
                       {s.density}
                     </span>
-                    <span className="cw-mono" style={{ fontSize: 13, color: "#7DD3FC" }}>
+                    <span className="cw-mono" style={{ fontSize: 13, color: DAY.textDim }}>
                       日陰{Math.round(s.shadeFraction * 100)}%
                     </span>
                   </li>
@@ -467,22 +580,26 @@ export default function VisitorRoute({ scenario, hour }: Props) {
 
             <div
               style={{
-                background: INK.surface,
-                border: `1px solid ${INK.line}`,
+                background: DAY.surface,
+                border: `1px solid ${DAY.line}`,
                 borderRadius: 14,
                 padding: 15,
               }}
             >
+              <div style={{ marginBottom: 9 }}>
+                <SourceTag kind="ai" tone="day" />
+              </div>
               <button
                 onClick={explain}
                 disabled={noteBusy}
                 style={{
                   width: "100%",
+                  minHeight: 48,
                   padding: "10px 0",
                   borderRadius: 999,
-                  border: `1px solid ${INK.line}`,
-                  background: "transparent",
-                  color: noteBusy ? INK.textFaint : INK.text,
+                  border: `1px solid ${DAY.line}`,
+                  background: DAY.page,
+                  color: noteBusy ? DAY.textFaint : DAY.text,
                   fontWeight: 700,
                   fontSize: 13,
                   cursor: noteBusy ? "wait" : "pointer",
@@ -491,11 +608,11 @@ export default function VisitorRoute({ scenario, hour }: Props) {
                 {noteBusy ? "説明を作成中…" : "この道を、ことばで説明してもらう"}
               </button>
               {note && (
-                <div style={{ marginTop: 11, fontSize: 13, lineHeight: 1.9, whiteSpace: "pre-wrap" }}>
+                <div style={{ marginTop: 11, fontSize: 13, lineHeight: 1.9, whiteSpace: "pre-wrap", color: DAY.text }}>
                   {note}
                 </div>
               )}
-              <div className="cw-mono" style={{ marginTop: 9, fontSize: 13, color: INK.textFaint, lineHeight: 1.6 }}>
+              <div className="cw-mono" style={{ marginTop: 9, fontSize: 13, color: DAY.textFaint, lineHeight: 1.6 }}>
                 経路 = ダイクストラ法（LLM不使用）
                 {noteModel ? ` ／ 説明 = ${noteModel}（${formatYen(noteYen)}）` : ""}
               </div>
@@ -503,6 +620,86 @@ export default function VisitorRoute({ scenario, hour }: Props) {
           </aside>
         </div>
       )}
+
+      {/* 自由文入力（補助手段） */}
+      <div
+        style={{
+          background: DAY.surface,
+          border: `1px solid ${DAY.line}`,
+          borderRadius: 14,
+          padding: 16,
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 15, color: DAY.text }}>ことばで探す（補助）</div>
+        <p style={{ margin: "4px 0 12px", fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
+          話し言葉のままでも探せます。AIが読み取った内容は必ず下に表示するので、
+          違っていたら上の①〜③の項目から選び直してください
+          （<b style={{ color: DAY.text }}>経路そのものの計算にAIは使っていません</b>）。
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            value={ask}
+            onChange={(e) => setAsk(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submitAsk()}
+            placeholder="例）日陰を通って救護所に行きたい／トイレ、混んでないところ"
+            aria-label="行きたい場所を自由に入力"
+            style={{
+              flex: "1 1 260px",
+              minHeight: 48,
+              padding: "0 14px",
+              borderRadius: 11,
+              border: `1px solid ${DAY.line}`,
+              background: DAY.page,
+              color: DAY.text,
+              fontSize: 15,
+            }}
+          />
+          <button
+            onClick={submitAsk}
+            disabled={askBusy}
+            style={{
+              minHeight: 48,
+              padding: "0 22px",
+              borderRadius: 11,
+              border: "none",
+              background: askBusy ? DAY.line : DAY.text,
+              color: "#FFFFFF",
+              fontWeight: 700,
+              fontSize: 15,
+              cursor: askBusy ? "wait" : "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {askBusy ? "聞き取り中…" : "ことばで探す"}
+          </button>
+        </div>
+
+        {intent && (
+          <div
+            role="status"
+            style={{
+              marginTop: 10,
+              padding: "11px 13px",
+              borderRadius: 10,
+              fontSize: 15,
+              lineHeight: 1.7,
+              background: DAY.page,
+              border: `1px solid ${intent.ok ? DAY.line : "#FB7A1E"}`,
+              color: DAY.text,
+            }}
+          >
+            <span style={{ color: DAY.textDim }}>
+              {intent.ok ? "こう解釈しました：" : "解釈できませんでした："}
+            </span>{" "}
+            {intent.text}
+            {intent.ok && (
+              <div style={{ fontSize: 13, color: DAY.textFaint, marginTop: 5 }}>
+                上の「安全な道を探す」欄に反映し、その内容で経路を表示しました。
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -510,9 +707,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
 function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "block" }}>
-      <span style={{ display: "block", fontSize: 13, color: INK.textDim, marginBottom: 5 }}>
-        {label}
-      </span>
+      <span style={{ display: "block", fontSize: 13, color: DAY.textDim, marginBottom: 5 }}>{label}</span>
       {children}
     </label>
   );
@@ -533,12 +728,13 @@ function Select({
       onChange={(e) => onChange(e.target.value)}
       style={{
         width: "100%",
-        padding: "9px 11px",
+        minHeight: 48,
+        padding: "0 11px",
         borderRadius: 9,
-        border: `1px solid ${INK.line}`,
-        background: INK.raised,
-        color: INK.text,
-        fontSize: 13,
+        border: `1px solid ${DAY.line}`,
+        background: DAY.surface,
+        color: DAY.text,
+        fontSize: 15,
       }}
     >
       {options.map(([v, l]) => (
@@ -550,20 +746,25 @@ function Select({
   );
 }
 
+/** 段階色は塗り・ドットにだけ使い、文字は必ず墨色（day-theme.ts の運用ルール） */
 function Chip({ color, children }: { color: string; children: React.ReactNode }) {
   return (
     <span
       style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
         fontSize: 13,
         fontWeight: 600,
-        color,
+        color: DAY.text,
         background: `${color}1A`,
-        border: `1px solid ${color}55`,
+        border: `1px solid ${color}66`,
         borderRadius: 999,
-        padding: "4px 10px",
+        padding: "4px 10px 4px 8px",
         whiteSpace: "nowrap",
       }}
     >
+      <span aria-hidden style={{ width: 8, height: 8, borderRadius: 999, background: color, flex: "none" }} />
       {children}
     </span>
   );

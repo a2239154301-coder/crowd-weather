@@ -119,17 +119,6 @@ function dayPlan(s) {
   return { peakD,peakDZ,peakDH,peakW,peakWH,water,aid,guide,mist,oneway,entryCtl,stationCoord,waitMin,corridorDanger,outDanger,baselinePH,optimizedPH,saved };
 }
 
-// 来場者向け：最短待ちゲート＆時間ずらし提案
-function gateAdvice(hour, s) {
-  const gates = IN_ZONES.filter(z=>z.type==="gate");
-  const nowBest = gates.map(g=>({g,wait:gateWait(g,hour,s)})).sort((a,b)=>a.wait-b.wait)[0];
-  let shift=null;
-  for(const h of HOURS){ if(h<=hour) continue;
-    const best=gates.map(g=>({g,h,wait:gateWait(g,h,s)})).sort((a,b)=>a.wait-b.wait)[0];
-    if(!shift||best.wait<shift.wait) shift=best; }
-  return { nowBest, shift };
-}
-
 // ---- atoms ----
 const WeatherIcon = ({ w, size=18, color }) =>
   w==="sunny"?<Sun size={size} color={color}/>:w==="rainy"?<CloudRain size={size} color={color}/>:<Cloud size={size} color={color}/>;
@@ -289,7 +278,7 @@ export default function CrowdWeather() {
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
             <div style={{display:"flex",gap:4,background:C.panel,border:`1px solid ${C.line}`,borderRadius:12,padding:4}}>
-              {[["ops","主催者コンソール",<Sliders key="a" size={13}/>],["app","来場者アプリ",<Smartphone key="b" size={13}/>],["data","データ設計",<Database key="c" size={13}/>]].map(([k,l,ic])=>(
+              {[["ops","主催者コンソール",<Sliders key="a" size={13}/>],["data","データ設計",<Database key="c" size={13}/>]].map(([k,l,ic])=>(
                 <button key={k} onClick={()=>setView(k)}
                   style={{display:"flex",alignItems:"center",gap:6,minHeight:44,padding:"8px 13px",borderRadius:9,cursor:"pointer",
                     fontWeight:600,fontSize:13,border:"none",
@@ -534,7 +523,6 @@ export default function CrowdWeather() {
           </div>
         </>)}
 
-        {view==="app"&&<VisitorApp s={s} hour={hour} setHour={setHour} plan={plan}/>}
         {view==="data"&&<DataView/>}
 
         <div style={{marginTop:22,display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",justifyContent:"space-between",fontFamily:mono,fontSize:13,color:C.faint}}>
@@ -588,109 +576,6 @@ function PlanDoc({ s, plan }) {
       <div style={{marginTop:10,fontSize:13,color:C.faint,display:"flex",alignItems:"center",gap:6}}>
         <ChevronRight size={12} color={C.faint}/>時間帯別シフト表・PDF出力に対応（本デモは抜粋）。実データ学習で会場ごとに最適化。
       </div>
-    </div>
-  );
-}
-
-// ---- 来場者アプリ（スマホモック） ----
-export function VisitorApp({ s, hour, setHour, plan }) {
-  const [tab,setTab]=useState("nav");
-  const advice=gateAdvice(hour,s);
-  const inStats=hourStats(IN_ZONES,hour,s);
-  const shadedNow=IN_ZONES.filter(z=>isShaded(z,hour));
-  const shadeRate=Math.round(shadedNow.length/IN_ZONES.length*100);
-  const aidD=density(IN_ZONES.find(z=>z.id==="aid"),hour,s);
-  const alertOn=inStats.maxD>=75||inStats.maxW>=31;
-  return (
-    <div className="cw-grid" style={{display:"grid",gridTemplateColumns:"minmax(0,380px) minmax(0,1fr)",gap:16,justifyContent:"center"}}>
-      {/* phone */}
-      <div style={{background:C.panel,border:`1px solid ${C.line}`,borderRadius:28,padding:12,maxWidth:380,margin:"0 auto",width:"100%"}}>
-        <div style={{background:C.deep,borderRadius:20,overflow:"hidden",border:`1px solid ${C.line}`}}>
-          {/* status */}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",borderBottom:`1px solid ${C.line}`}}>
-            <div style={{display:"flex",alignItems:"center",gap:7}}>
-              <Cloud size={17} color={C.cool}/><span style={{fontWeight:700,fontSize:13}}>CROWD WEATHER</span></div>
-            <div style={{fontFamily:mono,fontSize:13,color:C.muted}}>{hour}:00 ・ <WeatherIcon w={s.weather} size={12} color={C.muted}/> {s.temp}℃</div>
-          </div>
-          {/* push alert */}
-          {alertOn&&(
-            <div style={{margin:"12px 14px 0",background:C.danger+"1A",border:`1px solid ${C.danger}55`,borderRadius:12,padding:"10px 12px",display:"flex",gap:9}}>
-              <Bell size={15} color={C.danger} style={{flexShrink:0,marginTop:1}}/>
-              <div style={{fontSize:13,lineHeight:1.55,color:C.mist}}>
-                {inStats.maxD>=75?`${plan.peakDH}:00 頃 ${plan.peakDZ.name}周辺が危険密度の予報。`:""}
-                {inStats.maxW>=31?`現在 ${inStats.maxWZ.name}は暑熱危険。日陰側へ。`:""}
-                <span style={{color:C.cool}}> 空いているルートを見る →</span>
-              </div>
-            </div>
-          )}
-          {/* tabs */}
-          <div style={{display:"flex",gap:4,padding:"12px 14px 0"}}>
-            {[["nav","分散ナビ",<Navigation key="n" size={13}/>],["shade","日陰ルート",<Umbrella key="s" size={13}/>],["help","こまりごと",<LifeBuoy key="h" size={13}/>]].map(([k,l,ic])=>(
-              <button key={k} onClick={()=>setTab(k)}
-                style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"8px 0",
-                  borderRadius:9,cursor:"pointer",fontSize:13,fontWeight:600,border:"none",
-                  background:tab===k?C.cool:C.panel2,color:tab===k?C.ink:C.muted}}>{ic}{l}</button>
-            ))}
-          </div>
-          {/* body */}
-          <div style={{padding:14}}>
-            {tab==="nav"&&(<>
-              <div style={{fontSize:13,fontWeight:700,marginBottom:9}}>ピークそのものを、崩す。</div>
-              <div style={{background:C.panel2,border:`1px solid ${C.line}`,borderRadius:12,padding:12,marginBottom:9}}>
-                <div style={{fontSize:13,color:C.muted}}>いま入場するなら</div>
-                <div style={{fontWeight:700,fontSize:15,marginTop:2}}>{advice.nowBest.g.name} <span style={{fontFamily:mono,color:densStyle(density(advice.nowBest.g,hour,s)).c}}>約{advice.nowBest.wait}分待ち</span></div>
-              </div>
-              {advice.shift&&advice.shift.wait<advice.nowBest.wait-4&&(
-                <div style={{background:C.safe+"14",border:`1px solid ${C.safe}44`,borderRadius:12,padding:12,marginBottom:9}}>
-                  <div style={{fontSize:13,color:C.safe,fontWeight:700}}>おすすめ：時間をずらす</div>
-                  <div style={{fontSize:13,marginTop:3,lineHeight:1.6}}>{advice.shift.h}:00 の{advice.shift.g.name}なら <b style={{fontFamily:mono}}>約{advice.shift.wait}分</b>。それまで駅ナカで涼しく待つのが正解。</div>
-                </div>
-              )}
-              <div style={{fontFamily:mono,fontSize:13,color:C.faint,lineHeight:1.7}}>帰路：{CLOSE-1}:00〜 は駅ホームが最混雑。終演15分前退場 or 30分の余韻で回避。GPSログは匿名化のうえ予報精度向上に利用。</div>
-            </>)}
-            {tab==="shade"&&(<>
-              <div style={{fontSize:13,fontWeight:700,marginBottom:9}}>待つなら、涼しい側で。</div>
-              <ZoneMap zones={IN_ZONES} hour={hour} s={s} layer="heat" height={165} mini highlightShade/>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:9}}>
-                <div style={{fontFamily:mono,fontSize:13,color:C.muted}}>現在の日陰カバー率 <b style={{color:C.cool}}>{shadeRate}%</b></div>
-                <div style={{fontFamily:mono,fontSize:13,color:C.faint}}>☂ = 日陰</div>
-              </div>
-              <div style={{background:C.panel2,border:`1px solid ${C.line}`,borderRadius:12,padding:11,marginTop:9,fontSize:13,lineHeight:1.65}}>
-                {hour<=13?"午前は東側建物の影。物販の列は東ゲート側から並ぶのが涼しい。":hour<16?"日陰が最少の時間帯。屋内サブステージ・救護所を退避先に。":"夕方は西側に影が伸びる。西ゲート・フードコート側が涼しい。"}
-              </div>
-            </>)}
-            {tab==="help"&&(<>
-              <div style={{fontSize:13,fontWeight:700,marginBottom:9}}>要配慮者を、先に守る。</div>
-              {[
-                {ic:<Droplets size={15} color={C.cool}/>,t:"給水所",d:`救護・給水エリアまで徒歩3分。現在の混雑 ${aidD}（${densStyle(aidD).label}）`},
-                {ic:<LifeBuoy size={15} color={C.safe}/>,t:"救護所",d:"体調不良の予兆段階で案内。スタッフ側にも同時通知され、先回りで動ける。"},
-                {ic:<Users size={15} color={C.violet}/>,t:"ベビーカー優先動線",d:"段差なし・日陰率の高いルートを常時表示。混雑ピーク時は専用退場口へ。"},
-              ].map((f,i)=>(
-                <div key={i} style={{background:C.panel2,border:`1px solid ${C.line}`,borderRadius:12,padding:11,marginBottom:8}}>
-                  <div style={{display:"flex",alignItems:"center",gap:7,fontWeight:700,fontSize:13}}>{f.ic}{f.t}</div>
-                  <div style={{fontSize:13,color:C.muted,marginTop:4,lineHeight:1.6}}>{f.d}</div>
-                </div>
-              ))}
-            </>)}
-          </div>
-        </div>
-      </div>
-      {/* side note */}
-      <Panel style={{padding:18,alignSelf:"start"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-          <Smartphone size={15} color={C.cool}/><Eyebrow>Product 02 ── 来場者アプリ（無料）</Eyebrow></div>
-        <div style={{fontWeight:600,fontSize:15,marginBottom:12}}>いちばん暑い場所に、いちばん困っている人がいる。</div>
-        <div style={{fontSize:13,color:C.muted,lineHeight:1.8,marginBottom:14}}>
-          来場者アプリは無料。天気予報を見て傘をさすように、混雑予報を見て入場時間とルートを変える——その行動変容そのものがピークを崩し、事故リスクを下げる。利用ログは実測データとして予報精度を押し上げ、導入イベントが増えるほど強くなる。
-        </div>
-        <div style={{fontFamily:mono,fontSize:13,color:C.faint,marginBottom:10}}>時間を動かして、提案の変化を確認：</div>
-        <input type="range" min={OPEN} max={CLOSE} value={hour} onChange={e=>setHour(+e.target.value)} style={{width:"100%"}}/>
-        <div style={{display:"flex",justifyContent:"space-between",fontFamily:mono,fontSize:13,color:C.faint,marginTop:5}}>
-          <span>{OPEN}:00</span><span style={{color:C.cool}}>{hour}:00</span><span>{CLOSE}:00</span></div>
-        <div style={{marginTop:14,background:C.deep,border:`1px dashed ${C.line}`,borderRadius:11,padding:"11px 13px",fontFamily:mono,fontSize:13,color:C.muted,lineHeight:1.7}}>
-          主催者コンソールと同じ予測モデルに連動。運営の打ち手（供給側）と来場者の行動（需要側）を、ひとつの予報で同時に動かす。
-        </div>
-      </Panel>
     </div>
   );
 }

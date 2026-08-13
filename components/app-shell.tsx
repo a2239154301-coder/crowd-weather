@@ -1,9 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { INK } from "@/lib/forecast/scales";
-import type { Scenario } from "@/lib/forecast/types";
-import { DEFAULT_SCENARIO } from "@/lib/forecast/venue";
 import OpsConsole from "./ops-console";
 import IngestPanel from "./ingest-panel";
 import VisitorRoute from "./visitor-route";
@@ -15,8 +13,7 @@ import EvidencePanel from "./evidence-panel";
 import { ScenarioProvider } from "@/lib/ui/scenario-context";
 import CompareBar from "./compare-bar";
 import TrustPanel from "./trust-panel";
-import { VisitorApp, DataView } from "./crowd-weather";
-import { dayPlan } from "@/lib/forecast/model";
+import { DataView } from "./crowd-weather";
 
 /**
  * 画面の骨格。2026-08-11 に情報設計を再編（馬場氏要望1）:
@@ -61,24 +58,6 @@ export default function AppShell() {
   const [mode, setMode] = useState<Mode>("plan");
   const [view, setView] = useState<OrganizerView>("ops");
   const [liveView, setLiveView] = useState<LiveView>("status");
-
-  // 来場者アプリは移植前のモックのまま。新しい予報モデルの結果を、
-  // 旧モックが期待する項目名にも詰め替えて渡す。
-  const [legacyHour, setLegacyHour] = useState(16);
-  const legacyScenario: Scenario = DEFAULT_SCENARIO;
-  const legacyPlan = useMemo(() => {
-    const p = dayPlan(legacyScenario);
-    return {
-      ...p,
-      peakD: p.peakDensity,
-      peakDH: p.peakDensityHour,
-      peakDZ: p.peakDensityZone,
-      peakW: p.peakWbgt,
-      peakWH: p.peakWbgtHour,
-    };
-    // legacyScenario は固定値なので依存配列は空でよい
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <ScenarioProvider>
@@ -357,15 +336,7 @@ export default function AppShell() {
               来場者のスマホに届く画面。どこが空いていて、どこが日陰で、救護がどこにあるか —
               これまでスタッフに聞かないと分からなかった情報を手元に。
             </p>
-            <div style={{ display: "grid", gap: 16 }}>
-              <VisitorRoute scenario={legacyScenario} hour={legacyHour} />
-              <VisitorApp
-                s={legacyScenario}
-                hour={legacyHour}
-                setHour={setLegacyHour}
-                plan={legacyPlan}
-              />
-            </div>
+            <VisitorRoute />
           </>
         )}
 

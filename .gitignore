@@ -50,3 +50,6 @@ ingest-result.json
 prod-ingest.json
 public/samples/probe-overlay.svg
 public/samples/venue-sample.png
+
+# Claude Code local config (session-local preview launcher)
+.claude/
