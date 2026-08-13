@@ -30,18 +30,23 @@ import { dayPlan } from "@/lib/forecast/model";
  * 従来は「準備フェーズ」だけに最適化されていて、いちばん価値が高い
  * 当日の画面が存在しなかった。予報プロダクトの本番は当日の炎天下の現場であって、
  * 事務所のPCではない。
+ *
+ * 2026-08-13、現場フィードバック（馬場氏）で2点を再編:
+ * - データ設計・コストと安全は運営者の業務ではなく審査・技術説明のための情報なので、
+ *   計画タブから **審査用モード** へ逃がした（業務メニューに混ぜると操作の
+ *   メンタルモデルが崩れる、というUIUXレビューP0指摘）
+ * - スタッフ画面は「当日を回す」の一環（状況→調整→スタッフの縦串）なので、
+ *   最上位から当日モードの3番目のタブへ移した。最上位は4つのまま
  */
 
-type Mode = "plan" | "live" | "staff" | "visitor";
-type OrganizerView = "ops" | "output" | "ingest" | "data" | "trust";
-type LiveView = "status" | "adjust";
+type Mode = "plan" | "live" | "visitor" | "judge";
+type OrganizerView = "ops" | "output" | "ingest";
+type LiveView = "status" | "adjust" | "staff";
 
 const ORGANIZER_TABS: [OrganizerView, string][] = [
   ["ops", "予報コンソール"],
   ["output", "計画書出力"],
   ["ingest", "会場を読み込む"],
-  ["data", "データ設計"],
-  ["trust", "コストと安全"],
 ];
 
 /** 作業手順。step→タブの対応があるものはクリックで遷移できる */
@@ -123,9 +128,9 @@ export default function AppShell() {
             {(
               [
                 ["plan", "計画する", "会場を作り、条件を振り、計画書を出す"],
-                ["live", "当日を回す", "状況の確認と、計画の調整"],
-                ["staff", "スタッフ", "指示を受け、状況を報告する"],
+                ["live", "当日を回す", "状況・調整・スタッフへの指示"],
                 ["visitor", "来場者", "スマホで見る安全情報"],
+                ["judge", "審査用", "データ設計と、コスト・安全の根拠"],
               ] as [Mode, string, string][]
             ).map(([k, label, hint]) => (
               <button
@@ -261,8 +266,6 @@ export default function AppShell() {
             {view === "ops" && <OpsConsole />}
             {view === "output" && <PlanOutput />}
             {view === "ingest" && <IngestPanel />}
-            {view === "data" && (<><DataView /><EvidencePanel /></>)}
-            {view === "trust" && <TrustPanel />}
           </>
         )}
 
@@ -284,6 +287,7 @@ export default function AppShell() {
                   [
                     ["status", "状況 — いまどこが危ないか"],
                     ["adjust", "調整 — 計画と実際を合わせる"],
+                    ["staff", "スタッフ — 指示を受け、報告する"],
                   ] as [LiveView, string][]
                 ).map(([k, label]) => (
                   <button
@@ -313,16 +317,30 @@ export default function AppShell() {
             </div>
             {liveView === "status" && <LiveConsole />}
             {liveView === "adjust" && <AdjustConsole />}
+            {liveView === "staff" && (
+              <>
+                <p style={{ margin: "0 0 14px", fontSize: 13, color: INK.textDim, lineHeight: 1.8 }}>
+                  現場スタッフのスマホ画面。名前で入場し、配置ポストの指示を受け、
+                  現地の混雑・暑さをワンタップで報告する。
+                </p>
+                <StaffConsole />
+              </>
+            )}
           </>
         )}
 
-        {mode === "staff" && (
+        {mode === "judge" && (
           <>
             <p style={{ margin: "0 0 14px", fontSize: 13, color: INK.textDim, lineHeight: 1.8 }}>
-              現場スタッフのスマホ画面。名前で入場し、配置ポストの指示を受け、
-              現地の混雑・暑さをワンタップで報告する。
+              審査員・技術説明のためのページ。運営者の業務画面からは分離している —
+              データ設計（何を計算し、何をLLMに任せないか）・数値の出典・
+              AIコストと安全対策をここにまとめて開示する。
             </p>
-            <StaffConsole />
+            <div style={{ display: "grid", gap: 16 }}>
+              <DataView />
+              <EvidencePanel />
+              <TrustPanel />
+            </div>
           </>
         )}
 

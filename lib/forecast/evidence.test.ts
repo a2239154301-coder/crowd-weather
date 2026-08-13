@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   EVIDENCE_SOURCES,
   INDEX100_PERSONS_PER_SQM,
+  LOS_PLAIN,
   evidenceLabel,
+  evidencePlain,
   losBand,
   personsPerSqm,
 } from "./evidence";
@@ -182,5 +184,33 @@ describe("EVIDENCE_SOURCES — 出典一覧", () => {
     expect(all).toMatch(/Still/);
     expect(all).toMatch(/Helbing/);
     expect(all).toMatch(/Guide to Safety at Sports Grounds/);
+  });
+});
+
+describe("evidencePlain — 平易表示（08-13 追加。evidenceLabel は不変更）", () => {
+  const KINDS: ZoneKind[] = ["queue", "gate", "stage", "indoor", "aid", "corridor", "station", "alley"];
+
+  it("全kind×代表指数でフォーマットが崩れない", () => {
+    for (const kind of KINDS) {
+      for (const index of [0, 25, 50, 75, 100]) {
+        expect(evidencePlain(kind, index)).toMatch(/^1m²あたり約\d+\.\d人 — .+$/);
+      }
+    }
+  });
+
+  it("evidenceLabel と同じ計算に基づく（人数・LOS帯が一致）", () => {
+    for (const kind of KINDS) {
+      for (const index of [30, 75, 90]) {
+        const ppsm = personsPerSqm(kind, index).toFixed(1);
+        const { los } = losBand(kind, personsPerSqm(kind, index));
+        expect(evidencePlain(kind, index)).toBe(`1m²あたり約${ppsm}人 — ${LOS_PLAIN[los]}`);
+        expect(evidenceLabel(kind, index)).toContain(`LOS ${los}相当`);
+      }
+    }
+  });
+
+  it("危険帯75の滞留系は「身動きがとりづらい」= LOS F の平易語になる", () => {
+    expect(evidencePlain("queue", 75)).toContain("身動きがとりづらい");
+    expect(LOS_PLAIN.F).toBe("身動きがとりづらい");
   });
 });

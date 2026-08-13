@@ -9,6 +9,7 @@ import {
   riskLabel,
   riskSeverity,
   timeBand,
+  venuePeakHour,
   zoneDayCurve,
   zoneRisks,
 } from "./risk";
@@ -306,5 +307,33 @@ describe("riskLabel", () => {
     if (now) expect(riskLabel(now)).toBe("いま危険");
     if (later) expect(riskLabel(later)).toBe(`${later.dangerHour}:00 危険`);
     if (safe) expect(riskLabel(safe)).toBe("安全");
+  });
+});
+
+describe("venuePeakHour — 会場全体の危険度合計ピーク（PEAKバッジ用）", () => {
+  it("HOURS内の時刻を返し、決定的である", () => {
+    const p1 = venuePeakHour(ALL_ZONES, S);
+    const p2 = venuePeakHour(ALL_ZONES, S);
+    expect(HOURS).toContain(p1.hour);
+    expect(p1).toEqual(p2);
+  });
+
+  it("合計severityは全時刻の中で最大（手計算と一致）", () => {
+    const p = venuePeakHour(ALL_ZONES, S);
+    const totals = HOURS.map((h) =>
+      forecastZones(ALL_ZONES, h, S).reduce(
+        (sum, f) => sum + riskSeverity(f.density, f.wbgt),
+        0
+      )
+    );
+    expect(p.totalSeverity).toBe(Math.max(...totals));
+    // 同点なら早い時刻
+    expect(p.hour).toBe(HOURS[totals.indexOf(Math.max(...totals))]);
+  });
+
+  it("既定シナリオのピークは開場直後か夕方以降の混雑帯に落ちる", () => {
+    const p = venuePeakHour(ALL_ZONES, S);
+    expect(p.hour === 11 || p.hour >= 17).toBe(true);
+    expect(p.totalSeverity).toBeGreaterThan(0);
   });
 });

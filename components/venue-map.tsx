@@ -85,6 +85,12 @@ type Props = {
   staff?: StaffMark[];
   /** 小さく描く（計画書の添付図など） */
   compact?: boolean;
+  /**
+   * NOW/PEAKバッジ（馬場氏要望 08-13・スケッチ準拠でコンパス左隣に出す）。
+   * `hour === nowHour` でNOW、`hour === peakHour` でPEAK。渡さなければ出ない。
+   */
+  nowHour?: number | null;
+  peakHour?: number | null;
 };
 
 export default function VenueMap({
@@ -95,6 +101,8 @@ export default function VenueMap({
   emphasizeShade = false,
   staff,
   compact = false,
+  nowHour = null,
+  peakHour = null,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
 
@@ -332,6 +340,9 @@ export default function VenueMap({
 
         {/* 6. 会場図としての作法：方位・太陽・縮尺 */}
         <SunCompass sun={sun} night={night} hour={hour} compact={compact} />
+        {!compact && (
+          <TimeBadges now={hour === nowHour} peak={hour === peakHour} />
+        )}
         <g opacity={0.7} transform="translate(40, 668)">
           <line x1={0} y1={0} x2={125} y2={0} stroke={INK.textDim} strokeWidth={1.4} />
           <line x1={0} y1={-4} x2={0} y2={4} stroke={INK.textDim} strokeWidth={1.4} />
@@ -452,6 +463,47 @@ function SunCompass({
           )}
         </g>
       )}
+    </g>
+  );
+}
+
+/**
+ * NOW / PEAK バッジ（コンパスの左隣・水色ピル＝馬場氏スケッチ準拠）。
+ * NOW = 表示中の時刻が実時刻と一致。PEAK = 会場全体の危険度合計が最大の時刻
+ * （`venuePeakHour()`）。両方成立時はNOWを左に並べる。
+ */
+function TimeBadges({ now, peak }: { now: boolean; peak: boolean }) {
+  if (!now && !peak) return null;
+  const H = 30;
+  const W = 74;
+  const GAP = 8;
+  const rightEdge = 880; // コンパス円(cx928, r34)の左端から14px空ける
+  const y = 59; // 中心をコンパス中心(74)に合わせる
+  const badges: { label: string; fill: string; text: string }[] = [];
+  if (now) badges.push({ label: "NOW", fill: "#7DD3FC", text: "#0A0E17" });
+  if (peak) badges.push({ label: "PEAK", fill: "#E5254A", text: "#FFFFFF" });
+  return (
+    <g>
+      {badges.map((b, i) => {
+        const x = rightEdge - (badges.length - i) * W - (badges.length - 1 - i) * GAP;
+        return (
+          <g key={b.label}>
+            <rect x={x} y={y} width={W} height={H} rx={H / 2} fill={b.fill} stroke="#0A0E17" strokeWidth={1.5} />
+            <text
+              x={x + W / 2}
+              y={y + H / 2 + 5}
+              textAnchor="middle"
+              fontSize={15}
+              fontWeight={800}
+              fill={b.text}
+              className="cw-mono"
+              style={{ letterSpacing: 1.5 }}
+            >
+              {b.label}
+            </text>
+          </g>
+        );
+      })}
     </g>
   );
 }

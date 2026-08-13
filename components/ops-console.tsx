@@ -1,17 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Scenario, Weather } from "@/lib/forecast/types";
 import { VENUE, zonesFor, DEFAULT_SCENARIO, HOURS } from "@/lib/forecast/venue";
 import { centroid, dayPlan, hourPeak } from "@/lib/forecast/model";
 import { fetchLiveWeather, geocode } from "@/lib/weather/open-meteo";
 import HourlyStrip from "./hourly-strip";
 import ZoneTimeline from "./zone-timeline";
+import ArrivalList from "./arrival-list";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
-import { TIME_BANDS, arrivalOrder, timeBand, zoneRisks, type ZoneRisk } from "@/lib/forecast/risk";
-import { evidenceLabel } from "@/lib/forecast/evidence";
+import { TIME_BANDS, arrivalOrder, venuePeakHour, zoneRisks } from "@/lib/forecast/risk";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
 import VenueMap, { type MapLayer, type StaffMark } from "./venue-map";
+import SourceTag from "./source-tag";
 import { useScenario } from "@/lib/ui/scenario-context";
 import { postsFor, postsToMarks } from "@/lib/ops/staffing";
 
@@ -34,6 +35,16 @@ export default function OpsConsole() {
   const [hour, setHour] = useState(15);
   const [scope, setScope] = useState<"in" | "out">("in");
   const [layer, setLayer] = useState<MapLayer>("risk");
+
+  // NOWバッジ用の実時刻。SSRとの不一致を避けるためマウント後に取得。
+  // 開催時間外は null（クランプすると朝9時に「11:00がNOW」と誤表示になる）
+  const [clockHour, setClockHour] = useState<number | null>(null);
+  useEffect(() => {
+    const h = new Date().getHours();
+    setClockHour(h >= VENUE.open && h <= VENUE.close ? h : null);
+  }, []);
+  // PEAKバッジ用: 会場全体（内＋外）の危険度合計が最大になる時刻
+  const peak = useMemo(() => venuePeakHour(VENUE.zones, scenario), [scenario]);
 
   // Open-Meteo 実況（LIVE）。null=手入力のまま / "HH:MM"=実況反映済み / "error"
   const [liveBusy, setLiveBusy] = useState(false);
@@ -109,11 +120,10 @@ export default function OpsConsole() {
   const plan = useMemo(() => dayPlan(scenario), [scenario]);
   const now = useMemo(() => hourPeak(zones, hour, scenario), [zones, hour, scenario]);
 
-  const risks = useMemo(
-    () => (layer === "risk" ? zoneRisks(zones, hour, scenario) : null),
-    [layer, zones, hour, scenario]
-  );
-  const arrivals = useMemo(() => (risks ? arrivalOrder(risks) : []), [risks]);
+  // 到来順は常設表示（ZoneTimeline直下）になったのでレイヤーに関係なく計算する。
+  // 対象は常に会場内＋会場外の全ゾーン（scope切替の影響を受けない）
+  const risks = useMemo(() => zoneRisks(VENUE.zones, hour, scenario), [hour, scenario]);
+  const arrivals = useMemo(() => arrivalOrder(risks), [risks]);
 
   const dayBand = densityBand(plan.peakDensity);
   const heatBand = wbgtBand(plan.peakWbgt);
@@ -418,7 +428,7 @@ export default function OpsConsole() {
                 cursor: liveBusy ? "wait" : "pointer",
               }}
             >
-              {liveBusy ? "実況を取得中…" : "1. 現在の状況を反映"}
+              {liveBusy ? "実況を取得中…" : "1. 現在の状況に更新"}
             </button>
             {liveAt && liveAt !== "error" && (
               <div
@@ -441,7 +451,7 @@ export default function OpsConsole() {
                 lineHeight: 1.6,
               }}
             >
-              → 次は右の「2. やるべきことを出力」へ
+              → 次は右の「2. 現場に出すべき指示」へ
             </div>
             <Field label="天候">
               <div style={{ display: "flex", gap: 6 }}>
@@ -637,29 +647,33 @@ export default function OpsConsole() {
             </a>
           </div>
 
-          <VenueMap zones={zones} hour={hour} scenario={scenario} layer={layer} />
+          <VenueMap
+            zones={zones}
+            hour={hour}
+            scenario={scenario}
+            layer={layer}
+            nowHour={clockHour}
+            peakHour={peak.hour}
+          />
 
           {layer === "risk" && (
-            <>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 13,
-                  lineHeight: 1.8,
-                  color: INK.textDim,
-                  background: INK.raised,
-                  border: `1px solid ${INK.line}`,
-                  borderRadius: 10,
-                  padding: "11px 13px",
-                }}
-              >
-                色は<b style={{ color: INK.text }}>いまの値ではなく、危険帯に入るまでの残り時間</b>。
-                判定は混雑が主で、WBGTが31℃以上のとき段を1つ上げる。
-                既存サービスが出せるのは「いま混んでいる場所」まで —
-                ここで出しているのは<b style={{ color: INK.text }}>これから危なくなる場所</b>。
-              </p>
-              <ArrivalList arrivals={arrivals} hour={hour} />
-            </>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 13,
+                lineHeight: 1.8,
+                color: INK.textDim,
+                background: INK.raised,
+                border: `1px solid ${INK.line}`,
+                borderRadius: 10,
+                padding: "11px 13px",
+              }}
+            >
+              色は<b style={{ color: INK.text }}>いまの値ではなく、危険帯に入るまでの残り時間</b>。
+              判定は混雑が主で、WBGTが31℃以上のとき段を1つ上げる。
+              既存サービスが出せるのは「いま混んでいる場所」まで —
+              ここで出しているのは<b style={{ color: INK.text }}>これから危なくなる場所</b>。
+            </p>
           )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
@@ -722,7 +736,7 @@ export default function OpsConsole() {
                   この予報を、現場の言葉に翻訳する。
                 </div>
                 <div style={{ fontSize: 13, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
-                  <b style={{ color: INK.text }}>2. やるべきことを出力</b> =
+                  <b style={{ color: INK.text }}>2. 現場に出すべき指示</b> =
                   「〇時間後に〇〇のリスクが上がる → いま出す指示」の指示書。
                   <b style={{ color: INK.text }}>運営判断を聞く</b> = 打ち手を4項目で。
                   予報の計算そのものにLLMは使っていない。
@@ -746,7 +760,7 @@ export default function OpsConsole() {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {aiBusy ? "起草中…" : "2. やるべきことを出力"}
+                    {aiBusy ? "起草中…" : "2. 現場に出すべき指示"}
                   </button>
                   <button
                     onClick={() => askOrca("advice")}
@@ -801,15 +815,15 @@ export default function OpsConsole() {
                   whiteSpace: "pre-wrap",
                 }}
               >
-                {adviceLabel && (
-                  <div
-                    className="cw-mono"
-                    style={{ fontSize: 13, color: INK.textFaint, marginBottom: 7 }}
-                  >
-                    {adviceLabel}
-                    {easyStyle ? "・やさしい日本語" : ""}
-                  </div>
-                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 7 }}>
+                  <SourceTag kind="ai" tone="ink" />
+                  {adviceLabel && (
+                    <span className="cw-mono" style={{ fontSize: 13, color: INK.textFaint }}>
+                      {adviceLabel}
+                      {easyStyle ? "・やさしい日本語" : ""}
+                    </span>
+                  )}
+                </div>
                 {advice}
               </div>
             )}
@@ -909,7 +923,10 @@ export default function OpsConsole() {
                         gap: 8,
                       }}
                     >
-                      <div style={{ fontSize: 13, fontWeight: 700, color }}>{label}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color }}>{label}</span>
+                        <SourceTag kind="ai" tone="ink" />
+                      </div>
                       <div style={{ fontSize: 13, lineHeight: 1.8, whiteSpace: "pre-wrap", flex: 1 }}>
                         {b?.text}
                       </div>
@@ -1064,6 +1081,11 @@ export default function OpsConsole() {
 
       {/* ── ゾーン別 危険度（どこが、いつ、危険になるか） ── */}
       <ZoneTimeline zones={zones} scenario={scenario} hour={hour} onHourChange={setHour} />
+
+      {/* 危険の到来順（馬場氏要望 08-13: ZONE TIMELINEの下側に常設。レイヤーに依存しない） */}
+      <div style={{ marginTop: 10 }}>
+        <ArrivalList arrivals={arrivals} hour={hour} />
+      </div>
 
       {/* 計画書は「計画書出力」タブへ独立（2026-08-13 画面構成再編）。同じScenarioを共有している */}
     </div>
@@ -1232,63 +1254,6 @@ function Legend({ layer }: { layer: MapLayer }) {
  * 危険の到来順。「これから危なくなる場所」を時刻順に並べた表。
  * 地図が空間、この表が時間。2つで「いつ・どこが」が揃う。
  */
-function ArrivalList({ arrivals, hour }: { arrivals: ZoneRisk[]; hour: number }) {
-  if (arrivals.length === 0) {
-    return (
-      <div
-        style={{
-          background: INK.surface,
-          border: `1px solid ${INK.line}`,
-          borderRadius: 12,
-          padding: "14px 16px",
-          fontSize: 13,
-          color: INK.textDim,
-        }}
-      >
-        {hour}:00 以降、終演まで危険帯に達するゾーンはありません。
-      </div>
-    );
-  }
-  return (
-    <div style={{ background: INK.surface, border: `1px solid ${INK.line}`, borderRadius: 12, padding: "13px 16px" }}>
-      <div style={{ fontSize: 13, letterSpacing: 1, color: INK.textFaint, marginBottom: 4 }}>
-        危険の到来順（{hour}:00 以降）
-      </div>
-      {arrivals.map((r) => {
-        const band = timeBand(r.hoursToDanger);
-        const now = r.hoursToDanger === 0;
-        return (
-          <div
-            key={r.zone.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 11,
-              minHeight: 44,
-              borderBottom: `1px solid ${INK.hairline}`,
-            }}
-          >
-            <span style={{ width: 10, height: 10, borderRadius: 3, background: band.color, flex: "none" }} />
-            <span className="cw-mono" style={{ width: 54, fontSize: 15, color: now ? band.color : INK.text, fontWeight: 600 }}>
-              {now ? "いま" : `${r.dangerHour}:00`}
-            </span>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600 }}>{r.zone.name}</span>
-            <span style={{ fontSize: 13, color: INK.textDim }}>{r.dangerCause ?? "—"}</span>
-            {/* 物理的な意味の併記（evidence.ts の較正。「指数」を現場の言葉にする） */}
-            <span style={{ fontSize: 13, color: INK.textFaint, whiteSpace: "nowrap" }}>
-              {evidenceLabel(r.zone.kind, r.dangerDensity ?? r.density)}
-            </span>
-            {/* 危険になる「その時刻」の予報値。いまの値ではない */}
-            <span className="cw-mono" style={{ width: 118, textAlign: "right", fontSize: 13, color: INK.textDim }}>
-              混{r.dangerDensity} / WBGT{r.dangerWbgt}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function Stat({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
     <div style={{ background: INK.surface, border: `1px solid ${INK.line}`, borderRadius: 11, padding: "11px 13px" }}>

@@ -263,7 +263,7 @@ export default function IngestPanel() {
             </button>
           </div>
           <div style={{ marginTop: 10, fontSize: 13, color: INK.textFaint }}>
-            送信前にブラウザ内で長辺{RESIZE_LONG_EDGE}pxへ縮小するため、元画像は端末の外に出ない
+            ブラウザ内で長辺{RESIZE_LONG_EDGE}pxへ縮小した縮小版のみサーバーへ送信（元解像度の画像は送らない）
           </div>
           <input
             ref={fileRef}

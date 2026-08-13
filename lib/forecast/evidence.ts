@@ -121,6 +121,31 @@ export function evidenceLabel(kind: ZoneKind, index: number): string {
 }
 
 /**
+ * LOS帯の平易語（08-13・現場フィードバック対応）。
+ * 「LOS F」は業界外の人に通じない。ボタンや見出しでは平易語を主にし、
+ * 技術表記（evidenceLabel）は小書き・title等の副表示に回す。
+ */
+export const LOS_PLAIN: Record<LosResult["los"], string> = {
+  A: "すいている",
+  B: "余裕がある",
+  C: "人が増えてきた",
+  D: "混み合っている",
+  E: "かなり窮屈",
+  F: "身動きがとりづらい",
+};
+
+/**
+ * 平易表示。例: "1m²あたり約4.1人 — 身動きがとりづらい"。
+ * `evidenceLabel` と同じ計算（personsPerSqm → losBand）を平易語で言い換えるだけで、
+ * 新しい判定は持ち込まない。既存の `evidenceLabel` は完全一致テストがあるため触らない。
+ */
+export function evidencePlain(kind: ZoneKind, index: number): string {
+  const ppsm = personsPerSqm(kind, index);
+  const { los } = losBand(kind, ppsm);
+  return `1m²あたり約${ppsm.toFixed(1)}人 — ${LOS_PLAIN[los]}`;
+}
+
+/**
  * 出典一覧（UIの根拠セクションが表示する）。
  * 較正の数字がどこから来たかを、確認度込みで利用者に開示する。
  * 「未確認」のものは未確認と書く — 安全計画の道具として、

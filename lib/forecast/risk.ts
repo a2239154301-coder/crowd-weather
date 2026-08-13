@@ -192,6 +192,23 @@ export function firstDanger(
 /** 会場の全ゾーン（会場内＋会場外）。危険は境界をまたいで移動するので、リスク表示は分けない */
 export const ALL_ZONES: Zone[] = VENUE.zones;
 
+/**
+ * 会場全体の危険度合計がピークになる時刻（馬場氏要望 08-13: マップのPEAKバッジ用）。
+ *
+ * 全時刻 × 全ゾーンの riskSeverity(0-3) を単純合計し、最大の時刻を返す。
+ * 同点なら早い時刻（先に来るピークのほうが準備の判断に効く）。
+ * 面積・定員の加重はしない: 加重表を持つと `model.ts` の係数と二重管理になる。
+ */
+export function venuePeakHour(zones: Zone[], s: Scenario): { hour: number; totalSeverity: number } {
+  let best = { hour: HOURS[0], totalSeverity: -1 };
+  for (const h of HOURS) {
+    const fc = forecastZones(zones, h, s);
+    const total = fc.reduce((sum, f) => sum + riskSeverity(f.density, f.wbgt), 0);
+    if (total > best.totalSeverity) best = { hour: h, totalSeverity: total };
+  }
+  return best;
+}
+
 // ── なぜそうなるのか ────────────────────────────────────────────────
 //
 // 「17:00に物販の列が危険」とだけ出しても、現場は動けない。根拠が要る。

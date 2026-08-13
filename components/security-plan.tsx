@@ -5,6 +5,7 @@ import type { DayPlan, Scenario } from "@/lib/forecast/types";
 import { zonesFor } from "@/lib/forecast/venue";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
 import VenueMap, { type StaffMark } from "./venue-map";
+import SourceTag from "./source-tag";
 
 /**
  * 雑踏警備計画書（自動生成・抜粋）。
@@ -261,8 +262,9 @@ ${tableHtml(rows)}
             whiteSpace: "pre-wrap",
           }}
         >
-          <div className="cw-mono" style={{ fontSize: 13, color: INK.textFaint, marginBottom: 7 }}>
-            総括（AI起草・要確認）
+          <div className="cw-mono" style={{ fontSize: 13, color: INK.textFaint, marginBottom: 7, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <SourceTag kind="ai" tone="ink" />
+            総括
             {summaryMeta &&
               ` ── ${summaryMeta.servedModel} ／ ${(summaryMeta.latencyMs / 1000).toFixed(1)}s${summaryMeta.usage ? ` ／ out ${summaryMeta.usage.completion_tokens}tok` : ""}`}
           </div>

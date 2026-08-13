@@ -12,7 +12,8 @@ import {
   correctedDensity,
   type Observation,
 } from "@/lib/forecast/nowcast";
-import { evidenceLabel } from "@/lib/forecast/evidence";
+import { evidenceLabel, evidencePlain } from "@/lib/forecast/evidence";
+import SourceTag from "./source-tag";
 import { applyDemand } from "@/lib/forecast/demand";
 import { timetableContext } from "@/lib/data/timetable";
 import { CAMERAS, latestFrames, cameraSeries } from "@/lib/data/camera";
@@ -296,7 +297,10 @@ export default function AdjustConsole() {
 
         {/* ── 2. 計画と実際のずれ ── */}
         <section style={panel}>
-          <h3 style={h3}>計画と実際のずれ（ナウキャスト補正）</h3>
+          <h3 style={{ ...h3, display: "flex", alignItems: "center", gap: 8 }}>
+            計画と実際のずれ（ナウキャスト補正）
+            <SourceTag kind="calc" tone="day" />
+          </h3>
           {bigGaps.length === 0 && (
             <div style={{ fontSize: 13, color: DAY.textDim }}>予測と観測に大きなずれはありません（±10未満）</div>
           )}
@@ -310,7 +314,7 @@ export default function AdjustConsole() {
                 {c.zone.name} 予測{c.predicted} → <span style={{ color: c.correctedValue > c.predicted ? DAY.danger : "#0F6E56" }}>補正{c.correctedValue}</span>
                 {c.conflict && <span style={{ marginLeft: 6, fontSize: 13, color: DAY.danger }}>観測が食い違い→無線確認</span>}
               </div>
-              <div style={{ fontSize: 13, color: DAY.textFaint }}>{evidenceLabel(c.zone.kind, c.correctedValue)}・クリックでチャート</div>
+              <div title={evidenceLabel(c.zone.kind, c.correctedValue)} style={{ fontSize: 13, color: DAY.textFaint }}>{evidencePlain(c.zone.kind, c.correctedValue)}・クリックでチャート</div>
             </button>
           ))}
           {/* 分析チャート */}
@@ -365,7 +369,10 @@ export default function AdjustConsole() {
 
         {/* ── 4. AI提案 → 承認 → 配信 ── */}
         <section style={{ ...panel, borderColor: DAY.text, borderWidth: 2 }}>
-          <h3 style={h3}>AI配置提案（承認するまで配信されない）</h3>
+          <h3 style={{ ...h3, display: "flex", alignItems: "center", gap: 8 }}>
+            AI配置提案（承認するまで配信されない）
+            <SourceTag kind="ai" tone="day" />
+          </h3>
           <button onClick={askProposal} disabled={aiBusy} style={{ width: "100%", minHeight: 52, borderRadius: 10, border: "none", background: aiBusy ? "#93A3C0" : DAY.text, color: "#FFF", fontSize: 15, fontWeight: 700, cursor: aiBusy ? "wait" : "pointer" }}>
             {aiBusy ? "起草中…" : "観測と予報から提案を作る"}
           </button>
@@ -665,8 +672,14 @@ function AnalysisChart({
 
   return (
     <div style={{ marginTop: 10 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
-        {zoneName} — 予測 × 実測 × 補正（{evidenceLabel(zone.kind, correctedCurve.find((c) => c.hour === hour)?.v ?? 0)}）
+      {/* 見出しは平易に（08-13 現場フィードバック:「予測 × 実測 × 補正（LOS F相当）」は直感的に読めない）。
+          技術表記（人/m²・LOS）は副行の括弧内に残す */}
+      <div style={{ fontSize: 15, fontWeight: 700 }}>
+        {zoneName}の混雑 — 予報をカメラ・報告で補正中
+      </div>
+      <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 4 }}>
+        いま{evidencePlain(zone.kind, correctedCurve.find((c) => c.hour === hour)?.v ?? 0)}
+        （{evidenceLabel(zone.kind, correctedCurve.find((c) => c.hour === hour)?.v ?? 0)}）
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", background: "#FFF", borderRadius: 8, border: `1px solid ${DAY.line}` }} role="img" aria-label={`${zoneName}の予測と実測の時系列`}>
         {[0, 50, 75, 100].map((v) => (

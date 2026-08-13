@@ -18,7 +18,8 @@ import {
 } from "@/lib/forecast/risk";
 import type { Zone } from "@/lib/forecast/types";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
-import { evidenceLabel } from "@/lib/forecast/evidence";
+import { evidenceLabel, evidencePlain } from "@/lib/forecast/evidence";
+import SourceTag from "./source-tag";
 
 /**
  * 当日モード（LIVE）— 1画面・1判断。
@@ -254,7 +255,7 @@ export default function LiveConsole() {
             cursor: liveBusy ? "wait" : "pointer",
           }}
         >
-          {liveBusy ? "取得中…" : "実況を取り込む"}
+          {liveBusy ? "取得中…" : "現在の状況に更新"}
         </button>
         {liveAt && (
           <span style={{ fontSize: 13, color: liveAt === "error" ? "#B3123A" : DAY.textFaint }}>
@@ -411,20 +412,25 @@ export default function LiveConsole() {
             cursor: aiBusy ? "wait" : "pointer",
           }}
         >
-          {aiBusy ? "起草中…" : "やるべきことを出す"}
+          {aiBusy ? "起草中…" : "現場に出すべき指示"}
         </button>
         {directive && (
-          <div
-            style={{
-              marginTop: 14,
-              fontSize: 15,
-              lineHeight: 1.9,
-              whiteSpace: "pre-wrap",
-              color: DAY.text,
-            }}
-          >
-            {directive}
-          </div>
+          <>
+            <div style={{ marginTop: 12 }}>
+              <SourceTag kind="ai" tone="day" />
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 15,
+                lineHeight: 1.9,
+                whiteSpace: "pre-wrap",
+                color: DAY.text,
+              }}
+            >
+              {directive}
+            </div>
+          </>
         )}
         {directive && directiveMeta && (
           <div className="cw-mono" style={{ marginTop: 10, fontSize: 13, color: DAY.textFaint }}>
@@ -494,8 +500,8 @@ function Why({
               <li key={i}>{l}</li>
             ))}
             <li>
-              物理的には {evidenceLabel(zone.kind, reason.density)}
-              （較正の根拠はデータ設計タブ）
+              つまり{evidencePlain(zone.kind, reason.density)}
+              （{evidenceLabel(zone.kind, reason.density)}。較正の根拠は審査用ページ）
             </li>
           </ul>
           <p style={{ margin: "10px 0 0", fontSize: 13, color: DAY.textFaint, lineHeight: 1.7 }}>
