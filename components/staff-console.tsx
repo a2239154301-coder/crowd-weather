@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DAY } from "@/lib/ui/day-theme";
 import { useScenario } from "@/lib/ui/scenario-context";
 import { dayPlan } from "@/lib/forecast/model";
-import { postsFor, ROLE_LABEL, type Post, type PostRole } from "@/lib/ops/staffing";
-import type { Dispatch, StaffState } from "@/lib/ops/store";
+import { postsFor, ROLE_LABEL, zoneById, type Post, type PostRole } from "@/lib/ops/staffing";
+import type { Dispatch, Staff, StaffState } from "@/lib/ops/store";
+import type { RosterMember } from "@/lib/data/roster";
 
 /**
  * スタッフ画面 — 名前で入場し、指示を受け、状況を報告する（スマホ前提・明色）。
@@ -24,7 +25,13 @@ type Me = { name: string; role: PostRole; postCode: string; zoneId: string; zone
 const LS_KEY = "cw-staff-me";
 const POLL_MS = 5000;
 
-export default function StaffConsole() {
+/**
+ * @param fixedMember 固定ページモード（`/staff/[id]`）で渡す名簿メンバー。
+ *   渡されると localStorage（`cw-staff-me`）を一切読み書きしない — app-shell内の
+ *   通常スタッフタブと同じブラウザで開いても二重人格にならない。サーバーの
+ *   `/api/staff` レコードだけを唯一の真実として扱う（2026-08-13 追加）。
+ */
+export default function StaffConsole({ fixedMember }: { fixedMember?: RosterMember } = {}) {
   const { scenario } = useScenario();
   const posts = useMemo(() => postsFor(dayPlan(scenario)), [scenario]);
 
@@ -38,15 +45,16 @@ export default function StaffConsole() {
   const [freeText, setFreeText] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 復帰（リロードしても入場し直さない）
+  // 復帰（リロードしても入場し直さない）。固定ページモードはlocalStorageを使わない
   useEffect(() => {
+    if (fixedMember) return;
     try {
       const raw = localStorage.getItem(LS_KEY);
       if (raw) setMe(JSON.parse(raw));
     } catch {
       /* 壊れた保存値は無視して入場からやり直す */
     }
-  }, []);
+  }, [fixedMember]);
 
   const say = useCallback((msg: string) => {
     setToast(msg);
@@ -64,6 +72,41 @@ export default function StaffConsole() {
     },
     [say]
   );
+
+  // 固定ページモード: サーバーのpresenceレコードを唯一の真実として復元/登録する
+  useEffect(() => {
+    if (!fixedMember) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/staff");
+        const data = await res.json();
+        const list: Staff[] = Array.isArray(data.staff) ? data.staff : [];
+        const rec = list.find((s) => s.name === fixedMember.name);
+        if (!alive) return;
+        if (rec) {
+          const zone = rec.zoneId ? zoneById(rec.zoneId) : undefined;
+          setMe({ name: rec.name, role: rec.role, postCode: rec.postCode, zoneId: rec.zoneId, zoneName: zone?.name ?? "" });
+          setState(rec.state);
+        } else {
+          await fetch("/api/staff", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: fixedMember.name, role: fixedMember.role, postCode: "", zoneId: "", state: "away" }),
+          });
+          if (!alive) return;
+          setMe({ name: fixedMember.name, role: fixedMember.role, postCode: "", zoneId: "", zoneName: "" });
+          setState("away");
+        }
+      } catch {
+        if (alive) say("通信できませんでした（電波を確認）");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixedMember]);
 
   // 受信箱ポーリング
   useEffect(() => {
@@ -114,9 +157,13 @@ export default function StaffConsole() {
     if (status === "moving") {
       await transition("moving");
     } else {
-      const m: Me = { ...me!, zoneId: d.toZoneId, zoneName: d.toZoneName, postCode: d.fromCode ? `${d.fromCode}→` : me!.postCode };
-      // 着任先が新しい持ち場になる。ポストコードは「元コード→」表記で移動履歴を残す
-      localStorage.setItem(LS_KEY, JSON.stringify(m));
+      // ポストコードは toPostCode（正規コード）があればそれで確定する。
+      // 無ければ従来どおり「元コード→」表記で移動履歴を残す（2026-08-13 修正:
+      // toPostCode を優先しないと複数回移動するたびに「A-1→→→」と積み上がっていた）
+      const postCode = d.toPostCode || (d.fromCode ? `${d.fromCode}→` : me!.postCode);
+      const m: Me = { ...me!, zoneId: d.toZoneId, zoneName: d.toZoneName, postCode };
+      // 固定ページモードはlocalStorageを使わない（サーバーのpresenceレコードが唯一の真実）
+      if (!fixedMember) localStorage.setItem(LS_KEY, JSON.stringify(m));
       setMe(m);
       setState("onpost");
       await syncMe(m, "onpost");
@@ -127,7 +174,7 @@ export default function StaffConsole() {
   }
 
   async function sendButtonReport(kind: "crowd" | "heat", level: number) {
-    if (!me || sending) return;
+    if (!me || sending || !me.zoneId) return;
     setSending(true);
     try {
       await fetch("/api/report", {
@@ -142,7 +189,7 @@ export default function StaffConsole() {
   }
 
   async function sendTrouble() {
-    if (!me || sending) return;
+    if (!me || sending || !me.zoneId) return;
     setSending(true);
     try {
       await fetch("/api/report", {
@@ -157,7 +204,7 @@ export default function StaffConsole() {
   }
 
   async function sendFreeText() {
-    if (!me || sending || !freeText.trim()) return;
+    if (!me || sending || !freeText.trim() || !me.zoneId) return;
     setSending(true);
     try {
       const res = await fetch("/api/report", {
@@ -179,6 +226,15 @@ export default function StaffConsole() {
 
   // ── 入場前 ──────────────────────────────────────────
   if (!me) {
+    // 固定ページモードは入場フォームを出さない（presence登録が完了するまでの読み込み中表示）
+    if (fixedMember) {
+      return (
+        <div style={{ ...cardWrap, maxWidth: 420 }}>
+          <FixedHeader member={fixedMember} />
+          <div style={{ fontSize: 15, color: DAY.textDim }}>読み込み中…</div>
+        </div>
+      );
+    }
     return (
       <div style={{ ...cardWrap, maxWidth: 420 }}>
         <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>入場</div>
@@ -210,9 +266,13 @@ export default function StaffConsole() {
   // ── 入場後 ──────────────────────────────────────────
   const active = inbox.filter((d) => d.status === "sent" || d.status === "moving");
   const stateLabel: Record<StaffState, string> = { onpost: "着任中", moving: "移動中", away: "離脱中" };
+  // 配置待ち（presence登録直後、本部からまだ指示が来ていない）。状態遷移・報告はここではできない
+  const awaitingPlacement = me.postCode === "" || me.zoneId === "";
 
   return (
     <div style={{ ...cardWrap, maxWidth: 460 }}>
+      {fixedMember && <FixedHeader member={fixedMember} />}
+
       {toast && (
         <div role="status" style={{ background: DAY.text, color: "#FFF", borderRadius: 10, padding: "10px 14px", fontSize: 15, marginBottom: 10 }}>
           {toast}
@@ -222,26 +282,36 @@ export default function StaffConsole() {
       {/* 自分の配置 */}
       <div style={panel}>
         <div style={{ fontSize: 13, color: DAY.textFaint }}>あなたの配置（計画から）</div>
-        <div style={{ fontSize: 19, fontWeight: 700, margin: "2px 0" }}>
-          {me.name} — {me.zoneName}・{ROLE_LABEL[me.role]}
-        </div>
-        <div style={{ fontSize: 13, color: DAY.textDim }}>
-          ポスト {me.postCode} ／ いま: <b style={{ color: DAY.text }}>{stateLabel[state]}</b>
-        </div>
+        {awaitingPlacement ? (
+          <div style={{ fontSize: 15, color: DAY.textDim, margin: "6px 0" }}>
+            配置待ち — 本部からの指示が届くとここに表示されます
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 19, fontWeight: 700, margin: "2px 0" }}>
+              {me.name} — {me.zoneName}・{ROLE_LABEL[me.role]}
+            </div>
+            <div style={{ fontSize: 13, color: DAY.textDim }}>
+              ポスト {me.postCode} ／ いま: <b style={{ color: DAY.text }}>{stateLabel[state]}</b>
+            </div>
+          </>
+        )}
         <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-          <StateBtn label="着任中" active={state === "onpost"} onClick={() => transition("onpost")} />
-          <StateBtn label="移動中" active={state === "moving"} onClick={() => transition("moving")} />
-          <StateBtn label="離脱" active={state === "away"} onClick={() => transition("away", "休憩ほか")} />
+          <StateBtn label="着任中" active={state === "onpost"} onClick={() => transition("onpost")} disabled={awaitingPlacement} />
+          <StateBtn label="移動中" active={state === "moving"} onClick={() => transition("moving")} disabled={awaitingPlacement} />
+          <StateBtn label="離脱" active={state === "away"} onClick={() => transition("away", "休憩ほか")} disabled={awaitingPlacement} />
         </div>
-        <button
-          onClick={() => {
-            localStorage.removeItem(LS_KEY);
-            setMe(null);
-          }}
-          style={{ ...ghostBtn, marginTop: 8, fontSize: 13 }}
-        >
-          入場し直す
-        </button>
+        {!fixedMember && (
+          <button
+            onClick={() => {
+              localStorage.removeItem(LS_KEY);
+              setMe(null);
+            }}
+            style={{ ...ghostBtn, marginTop: 8, fontSize: 13 }}
+          >
+            入場し直す
+          </button>
+        )}
       </div>
 
       {/* 受信箱 */}
@@ -281,11 +351,18 @@ export default function StaffConsole() {
       {/* 報告 */}
       <div style={panel}>
         <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 6 }}>
-          いまの状況を報告（{me.zoneName}）
+          いまの状況を報告{me.zoneName ? `（${me.zoneName}）` : ""}
         </div>
-        <ReportRow label="混雑" onPick={(n) => sendButtonReport("crowd", n)} disabled={sending} />
-        <ReportRow label="暑さ" onPick={(n) => sendButtonReport("heat", n)} disabled={sending} />
-        <button onClick={sendTrouble} disabled={sending} style={{ ...ghostBtn, width: "100%", marginTop: 6, borderColor: "#E5254A", color: DAY.danger }}>
+        {awaitingPlacement && (
+          <div style={{ fontSize: 13, color: DAY.textDim, marginBottom: 6 }}>配置後に報告できます</div>
+        )}
+        <ReportRow label="混雑" onPick={(n) => sendButtonReport("crowd", n)} disabled={sending || awaitingPlacement} />
+        <ReportRow label="暑さ" onPick={(n) => sendButtonReport("heat", n)} disabled={sending || awaitingPlacement} />
+        <button
+          onClick={sendTrouble}
+          disabled={sending || awaitingPlacement}
+          style={{ ...ghostBtn, width: "100%", marginTop: 6, borderColor: "#E5254A", color: DAY.danger }}
+        >
           トラブル発生
         </button>
         <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
@@ -295,9 +372,14 @@ export default function StaffConsole() {
             onKeyDown={(e) => e.key === "Enter" && sendFreeText()}
             placeholder="自由文でも報告できます（例: 列が折り返してる）"
             aria-label="自由文報告"
+            disabled={awaitingPlacement}
             style={{ ...inputStyle, flex: 1 }}
           />
-          <button onClick={sendFreeText} disabled={sending || !freeText.trim()} style={{ ...primaryBtn, whiteSpace: "nowrap" }}>
+          <button
+            onClick={sendFreeText}
+            disabled={sending || !freeText.trim() || awaitingPlacement}
+            style={{ ...primaryBtn, whiteSpace: "nowrap" }}
+          >
             送る
           </button>
         </div>
@@ -306,10 +388,34 @@ export default function StaffConsole() {
   );
 }
 
-function StateBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function FixedHeader({ member }: { member: RosterMember }) {
+  return (
+    <div style={panel}>
+      <div style={{ fontSize: 19, fontWeight: 700 }}>
+        {member.name} さん専用ページ（{member.group}）
+      </div>
+      <div style={{ fontSize: 13, color: DAY.textDim, marginTop: 4 }}>
+        このページはあなた専用URLです。ブックマークしてください。
+      </div>
+    </div>
+  );
+}
+
+function StateBtn({
+  label,
+  active,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={active}
       style={{
         flex: 1,
@@ -320,7 +426,8 @@ function StateBtn({ label, active, onClick }: { label: string; active: boolean; 
         color: active ? "#FFF" : DAY.text,
         fontSize: 15,
         fontWeight: 700,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.5 : 1,
       }}
     >
       {label}

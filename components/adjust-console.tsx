@@ -250,6 +250,8 @@ export default function AdjustConsole() {
 
     const byZone = new Map<string, Staff[]>();
     for (const s of staffList) {
+      // presence登録（配置待ち）はマップに描かない（zoneId空はまだ実配置ではない）
+      if (!s.zoneId) continue;
       const arr = byZone.get(s.zoneId) ?? [];
       arr.push(s);
       byZone.set(s.zoneId, arr);

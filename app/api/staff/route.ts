@@ -44,8 +44,11 @@ export async function POST(req: Request) {
   // 任意名で空レコードを作れる緩和にはしない（名簿の静的23名のみ）
   const isPresenceRegistration =
     postCode === "" && zoneId === "" && state === "away" && Boolean(rosterByName(name));
-  if (!isPresenceRegistration && (!postCode || !zoneId)) {
-    return NextResponse.json({ error: "postCode and valid zoneId are required" }, { status: 400 });
+  // postCode空でもzoneIdが有効なら受理する（=ポストを持たないゾーン応援。
+  // フード等ポスト未定義のゾーンへの移動指示に「着きました」と応答すると
+  // postCode無しで着任が飛んでくるため、ここで400にすると無音の不整合になる）
+  if (!isPresenceRegistration && !zoneId) {
+    return NextResponse.json({ error: "valid zoneId is required" }, { status: 400 });
   }
   const note = typeof body.note === "string" ? body.note.slice(0, 60) : undefined;
 
