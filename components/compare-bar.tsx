@@ -47,8 +47,9 @@ export default function CompareBar() {
             aria-current={current ? "page" : undefined}
             style={{
               display: "flex",
-              alignItems: "baseline",
+              alignItems: "center",
               gap: 7,
+              minHeight: 44,
               padding: "6px 12px",
               borderRadius: 8,
               textDecoration: "none",

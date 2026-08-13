@@ -7,6 +7,8 @@ import { dayPlan } from "@/lib/forecast/model";
 import { postsFor, ROLE_LABEL, zoneById, type Post, type PostRole } from "@/lib/ops/staffing";
 import type { Dispatch, Staff, StaffState } from "@/lib/ops/store";
 import type { RosterMember } from "@/lib/data/roster";
+import SyncBadge from "./sync-badge";
+import { useSyncStatus } from "@/lib/ui/use-polling";
 
 /**
  * スタッフ画面 — 名前で入場し、指示を受け、状況を報告する（スマホ前提・明色）。
@@ -109,6 +111,7 @@ export default function StaffConsole({ fixedMember }: { fixedMember?: RosterMemb
   }, [fixedMember]);
 
   // 受信箱ポーリング
+  const sync = useSyncStatus();
   useEffect(() => {
     if (!me) return;
     let alive = true;
@@ -117,8 +120,9 @@ export default function StaffConsole({ fixedMember }: { fixedMember?: RosterMemb
         const res = await fetch(`/api/dispatch?name=${encodeURIComponent(me.name)}`);
         const data = await res.json();
         if (alive && Array.isArray(data.dispatches)) setInbox(data.dispatches);
+        if (alive) sync.markOk();
       } catch {
-        /* ポーリング失敗は次周期に任せる */
+        if (alive) sync.markFail();
       }
     };
     tick();
@@ -127,6 +131,7 @@ export default function StaffConsole({ fixedMember }: { fixedMember?: RosterMemb
       alive = false;
       clearInterval(t);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
 
   async function enter() {
@@ -316,7 +321,10 @@ export default function StaffConsole({ fixedMember }: { fixedMember?: RosterMemb
 
       {/* 受信箱 */}
       <div style={panel}>
-        <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 6 }}>受信箱（5秒ごとに更新）</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, color: DAY.textFaint }}>受信箱（5秒ごとに更新）</span>
+          <SyncBadge sync={sync} tone="day" />
+        </div>
         {active.length === 0 && <div style={{ fontSize: 15, color: DAY.textDim }}>新しい指示はありません</div>}
         {active.map((d) => (
           <div

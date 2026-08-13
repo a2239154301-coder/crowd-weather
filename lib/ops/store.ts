@@ -97,15 +97,34 @@ async function upGet<T>(key: string): Promise<T | null> {
   });
   if (!res.ok) return null;
   const data = (await res.json()) as { result: string | null };
-  return data.result ? (JSON.parse(data.result) as T) : null;
+  if (!data.result) return null;
+  const parsed: unknown = JSON.parse(data.result);
+  // 旧実装（〜08-13）は二重stringifyで「配列のJSON文字列」を保存していた。
+  // その時期に書かれたキーも読めるよう、文字列ならもう一段parseして自己修復する
+  return typeof parsed === "string" ? (JSON.parse(parsed) as T) : (parsed as T);
 }
 
 async function upSet(key: string, value: unknown): Promise<void> {
+  // Upstash RESTのSETはリクエストボディがそのまま値になる。
+  // stringifyは1回だけ（2回やると「配列」でなく「配列のJSON文字列」が保存され、
+  // 読み出し側で .length が文字数を返す・.filter がTypeErrorになる。08-13実測）
   await fetch(`${UP_URL}/set/${key}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${UP_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify(JSON.stringify(value)),
+    body: JSON.stringify(value),
   });
+}
+
+/**
+ * いまどちらのストアで動いているか（2026-08-13 追加）。
+ *
+ * Vercel の serverless はリクエストごとに別インスタンスになりうるため、
+ * in-memory のまま本番URLでスタッフ導線を使うと「入場したのに盤面に出ない」が
+ * **エラーを出さずに**起きる。撮影・デモの前に画面から一目で確認できるように、
+ * 種別だけを公開する（URLやトークンは絶対に返さない）。
+ */
+export function storeKind(): "upstash" | "memory" {
+  return useUpstash ? "upstash" : "memory";
 }
 
 // ── 公開API（in-memory / Upstash を透過的に切替） ────────────────────

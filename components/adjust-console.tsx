@@ -22,6 +22,8 @@ import { CAMERAS, latestFrames, cameraSeries } from "@/lib/data/camera";
 import { historyCurves } from "@/lib/data/history";
 import { simulateEgress, defaultEgress, regulatedEgress } from "@/lib/forecast/egress";
 import type { Dispatch, Report, Staff } from "@/lib/ops/store";
+import SyncBadge from "./sync-badge";
+import { useSyncStatus } from "@/lib/ui/use-polling";
 
 /**
  * 調整コンソール — 計画と実際のAdjustmentを行う司令塔（当日モード「調整」ビュー）。
@@ -92,6 +94,7 @@ export default function AdjustConsole({ onOpenBoard }: { onOpenBoard?: () => voi
   }, [scenario]);
 
   // ── ポーリング（報告・スタッフ・指示） ──
+  const sync = useSyncStatus();
   useEffect(() => {
     let alive = true;
     const tick = async () => {
@@ -105,8 +108,9 @@ export default function AdjustConsole({ onOpenBoard }: { onOpenBoard?: () => voi
         if (Array.isArray(r1.reports)) setReports(r1.reports);
         if (Array.isArray(r2.staff)) setStaffList(r2.staff);
         if (Array.isArray(r3.dispatches)) setDispatches(r3.dispatches);
+        sync.markOk();
       } catch {
-        /* 次周期 */
+        if (alive) sync.markFail();
       }
     };
     tick();
@@ -115,6 +119,7 @@ export default function AdjustConsole({ onOpenBoard }: { onOpenBoard?: () => voi
       alive = false;
       clearInterval(t);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── 観測の組み立て（カメラ=デモデータ・報告=store） ──
@@ -349,7 +354,10 @@ export default function AdjustConsole({ onOpenBoard }: { onOpenBoard?: () => voi
 
         {/* ── 3. 配置サマリー（盤面は「配置」タブへ移設 2026-08-13） ── */}
         <section style={panel}>
-          <h3 style={h3}>配置サマリー</h3>
+          <h3 style={{ ...h3, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            配置サマリー
+            <SyncBadge sync={sync} tone="day" />
+          </h3>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
             {(
               [

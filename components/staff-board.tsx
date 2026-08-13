@@ -17,6 +17,9 @@ import {
 } from "@/lib/ops/board";
 import VenueMap from "./venue-map";
 import type { Dispatch, Staff } from "@/lib/ops/store";
+import StoreStatus from "./store-status";
+import SyncBadge from "./sync-badge";
+import { useSyncStatus } from "@/lib/ui/use-polling";
 
 /**
  * 配置ボード（当日モード「配置」タブ）— 名簿（リスト）と会場図（マップ）の二重体制。
@@ -93,6 +96,7 @@ export default function StaffBoard() {
   const posts = useMemo(() => postsFor(plan), [plan]);
 
   // ── ポーリング（スタッフ・指示） ──
+  const sync = useSyncStatus();
   useEffect(() => {
     let alive = true;
     const tick = async () => {
@@ -104,8 +108,9 @@ export default function StaffBoard() {
         if (!alive) return;
         if (Array.isArray(r1.staff)) setStaffList(r1.staff);
         if (Array.isArray(r2.dispatches)) setDispatches(r2.dispatches);
+        sync.markOk();
       } catch {
-        /* 次周期 */
+        if (alive) sync.markFail();
       }
     };
     tick();
@@ -114,6 +119,7 @@ export default function StaffBoard() {
       alive = false;
       clearInterval(t);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -214,6 +220,17 @@ export default function StaffBoard() {
     setError("");
   }
 
+  // Escキーでモーダルを閉じる（キーボードのみの操作を塞がないため。2026-08-13 追加）
+  useEffect(() => {
+    if (!moveTargetZoneId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancelMove();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveTargetZoneId, busy]);
+
   async function submitDispatch() {
     if (!selName || !moveTargetZoneId || busy) return;
     setBusy(true);
@@ -260,6 +277,8 @@ export default function StaffBoard() {
       {/* 見出し + 集計ピル */}
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
         <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700 }}>配置ボード — 仮名簿（デモデータ）</h2>
+        <StoreStatus />
+        <SyncBadge sync={sync} tone="day" />
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <Pill label="着任" n={counts.onpost} color="#0F6E56" bg="#E9F8EF" />
           <Pill label="移動中" n={counts.moving} color="#B45309" bg="#FFF3E4" />
