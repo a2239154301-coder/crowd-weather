@@ -6,7 +6,6 @@ import { useScenario } from "@/lib/ui/scenario-context";
 import { DAY } from "@/lib/ui/day-theme";
 import { DEFAULT_SCENARIO, HOURS, VENUE } from "@/lib/forecast/venue";
 import { dayPlan, hourPeak } from "@/lib/forecast/model";
-import { fetchLiveWeather } from "@/lib/weather/open-meteo";
 import {
   arrivalOrder,
   explainDanger,
@@ -45,40 +44,16 @@ const WEATHER_LABEL: Record<Weather, string> = { sunny: "晴", cloudy: "曇", ra
 
 export default function LiveConsole() {
   // 予報条件は計画モードと共有（計画で作った条件が当日のベースになる）
-  const { scenario, setScenario } = useScenario();
+  const { scenario } = useScenario();
   const [hour, setHour] = useState(15);
   // 実時刻は描画後に入れる（SSRとクライアントで値が食い違うのを避ける）
   const [clock, setClock] = useState<string | null>(null);
-  const [liveAt, setLiveAt] = useState<string | null>(null);
-  const [liveBusy, setLiveBusy] = useState(false);
 
   useEffect(() => {
     const d = new Date();
     setClock(`${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`);
     setHour(clamp(d.getHours(), VENUE.open, VENUE.close));
   }, []);
-
-  async function applyLive() {
-    if (liveBusy) return;
-    setLiveBusy(true);
-    try {
-      const live = await fetchLiveWeather({ lat: scenario.geo.lat, lon: scenario.geo.lon });
-      setScenario((p) => ({
-        ...p,
-        weather: live.weather,
-        temp: live.tempC,
-        rhPct: live.rhPct,
-        windMs: live.windMs,
-        date: live.date,
-      }));
-      setHour(clamp(Math.round(live.minutes / 60), VENUE.open, VENUE.close));
-      setLiveAt(live.timeLabel);
-    } catch {
-      setLiveAt("error");
-    } finally {
-      setLiveBusy(false);
-    }
-  }
 
   const risks = useMemo(() => zoneRisks(VENUE.zones, hour, scenario), [hour, scenario]);
   const peak = useMemo(() => hourPeak(VENUE.zones, hour, scenario), [hour, scenario]);
@@ -197,26 +172,10 @@ export default function LiveConsole() {
         gap: 12,
       }}
     >
-      {/* ① いつ・どこ */}
+      {/* ① いつ・どこ
+          2026-08-14、馬場氏レビュー項目13で LIVE バッジと「現在の状況に更新」を削除。
+          当日モードは常に最新であるべきで手動更新は不要という判断（実況取込は計画モードに残す・項目4） */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 7,
-            background: "#E5254A",
-            color: "#FFFFFF",
-            borderRadius: 999,
-            padding: "7px 14px",
-            fontSize: 15,
-            fontWeight: 700,
-            letterSpacing: 1,
-          }}
-        >
-          <span style={{ width: 9, height: 9, borderRadius: 999, background: "#FFFFFF" }} />
-          LIVE
-        </span>
-
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
           <StepButton label="1時間もどす" onClick={() => setHour((h) => Math.max(VENUE.open, h - 1))}>
             ◀
@@ -240,29 +199,6 @@ export default function LiveConsole() {
             {clock ? ` ・ 現在 ${clock}` : ""}
           </span>
         </div>
-
-        <button
-          onClick={applyLive}
-          style={{
-            marginLeft: "auto",
-            minHeight: 48,
-            padding: "0 20px",
-            borderRadius: 12,
-            border: `1px solid ${DAY.line}`,
-            background: DAY.surface,
-            color: DAY.text,
-            fontSize: 15,
-            fontWeight: 700,
-            cursor: liveBusy ? "wait" : "pointer",
-          }}
-        >
-          {liveBusy ? "取得中…" : "現在の状況に更新"}
-        </button>
-        {liveAt && (
-          <span style={{ fontSize: 13, color: liveAt === "error" ? "#B3123A" : DAY.textFaint }}>
-            {liveAt === "error" ? "実況を取得できませんでした" : `実況 ${liveAt} 反映`}
-          </span>
-        )}
       </div>
 
       {/* ② いま何が */}

@@ -59,7 +59,7 @@ export default function EntryPeak({ tickets, tone }: { tickets: number; tone: "i
         <SourceTag kind="calc" tone={tone} />
       </div>
 
-      <div style={{ marginTop: 10, fontSize: 19, fontWeight: 700, color: t.text, lineHeight: 1.5 }}>
+      <div style={{ marginTop: 10, fontSize: 15, fontWeight: 700, color: t.text, lineHeight: 1.5 }}>
         {summary}
       </div>
 

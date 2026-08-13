@@ -53,12 +53,13 @@ export default function ArrivalList({ arrivals, hour }: { arrivals: ZoneRisk[]; 
             }}
           >
             {/* 段階色は左のドットにのみ使う（明色地の文字は墨色。day-theme.ts冒頭の規約）。
-                「いま」の強調は語＋太字が担い、色はここでは繰り返さない */}
+                「いま」の強調は語が担い、色はここでは繰り返さない
+                （2026-08-14、馬場氏レビュー項目10で太字を外した） */}
             <span style={{ width: 10, height: 10, borderRadius: 3, background: band.color, flex: "none" }} />
-            <span className="cw-mono" style={{ width: 54, fontSize: 15, color: DAY.text, fontWeight: 600 }}>
+            <span className="cw-mono" style={{ width: 54, fontSize: 15, color: DAY.text, fontWeight: 400 }}>
               {now ? "いま" : `${r.dangerHour}:00`}
             </span>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600 }}>{r.zone.name}</span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 400 }}>{r.zone.name}</span>
             <span style={{ fontSize: 13, color: DAY.textDim }}>{r.dangerCause ?? "—"}</span>
             {/* 物理的な意味（evidence.ts の較正）。平易語を主に、技術表記は title に残す */}
             <span

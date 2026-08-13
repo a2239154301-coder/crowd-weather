@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { INK } from "@/lib/forecast/scales";
-import { DAY } from "@/lib/ui/day-theme";
+import { DAY, NAV_ACCENT } from "@/lib/ui/day-theme";
 import OpsConsole from "./ops-console";
 import IngestPanel from "./ingest-panel";
 import VisitorRoute from "./visitor-route";
@@ -48,18 +48,30 @@ import { DataView } from "./data-view";
  * ステップ2「条件を設定」と3「予報を確認」の遷移先がどちらも `ops` で同一だった。
  */
 
-const MODES = ["plan", "live", "visitor", "judge"] as const;
+/**
+ * 最上位フェーズのタブ。キーとラベルを1箇所にまとめる
+ * （2026-08-14、馬場氏レビュー項目11。従来は許可リスト用の `MODES` とJSXインラインの
+ * ラベル配列が別々に存在する二重管理だった。ここから両方を導出する）。
+ */
+const MODE_TABS = [
+  ["plan", "1 制作向け"],
+  ["live", "2 現場向け"],
+  ["visitor", "3 来場者向け"],
+  ["judge", "4 審査向け"],
+] as const;
 const ORGANIZER_VIEWS = ["ops", "output", "ingest"] as const;
 const LIVE_VIEWS = ["status", "adjust", "board", "staff"] as const;
 
-type Mode = (typeof MODES)[number];
+type Mode = (typeof MODE_TABS)[number][0];
 type OrganizerView = (typeof ORGANIZER_VIEWS)[number];
 type LiveView = (typeof LIVE_VIEWS)[number];
+const MODES: readonly Mode[] = MODE_TABS.map(([k]) => k);
 
+/** 2026-08-14、主催者サブタブの順序を作業順（予報→読み込み→出力）に並べ替え（項目12） */
 const ORGANIZER_TABS: [OrganizerView, string][] = [
   ["ops", "予報コンソール"],
-  ["output", "計画書出力"],
   ["ingest", "会場を読み込む"],
+  ["output", "計画書出力"],
 ];
 
 /** URLの値は信用しない。許可リストに無ければ既定値へ倒す */
@@ -180,14 +192,7 @@ function AppShellInner() {
               padding: 3,
             }}
           >
-            {(
-              [
-                ["plan", "計画する", "会場を作り、条件を振り、計画書を出す"],
-                ["live", "当日を回す", "状況・調整・スタッフへの指示"],
-                ["visitor", "来場者", "スマホで見る安全情報"],
-                ["judge", "審査用", "データ設計と、コスト・安全の根拠"],
-              ] as [Mode, string, string][]
-            ).map(([k, label, hint]) => (
+            {MODE_TABS.map(([k, label]) => (
               <button
                 key={k}
                 role="tab"
@@ -203,13 +208,12 @@ function AppShellInner() {
                   borderRadius: 9,
                   border: "none",
                   cursor: "pointer",
-                  background: mode === k ? INK.text : "transparent",
-                  color: mode === k ? INK.page : INK.textDim,
+                  background: mode === k ? NAV_ACCENT : "transparent",
+                  color: mode === k ? "#FFFFFF" : INK.textDim,
                   textAlign: "left",
                 }}
               >
                 <span style={{ fontSize: 15, fontWeight: 700 }}>{label}</span>
-                <span style={{ fontSize: 13, opacity: 0.75 }}>{hint}</span>
               </button>
             ))}
           </div>

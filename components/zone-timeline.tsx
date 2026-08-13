@@ -74,7 +74,7 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
           <div className="cw-mono" style={{ fontSize: 13, letterSpacing: 1.5, color: DAY.textFaint }}>
             ZONE TIMELINE ── ゾーン別 日陰率 × WBGT
           </div>
-          <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>ここが、いつ、危険になるか</div>
+          <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>どこが、いつ、危険になるか</div>
         </div>
         <div
           className="cw-mono"
