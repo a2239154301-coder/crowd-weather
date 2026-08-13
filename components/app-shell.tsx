@@ -15,7 +15,7 @@ import EvidencePanel from "./evidence-panel";
 import { ScenarioProvider } from "@/lib/ui/scenario-context";
 import CompareBar from "./compare-bar";
 import TrustPanel from "./trust-panel";
-import { DataView } from "./crowd-weather";
+import { DataView } from "./data-view";
 
 /**
  * 画面の骨格。2026-08-11 に情報設計を再編（馬場氏要望1）:
@@ -41,6 +41,10 @@ import { DataView } from "./crowd-weather";
  * リロードすると必ず「計画/予報」に戻り（デモ中の事故要因）、見ている画面を
  * URLで共有できず、ブラウザの戻るも効かなかった。
  * `?mode=live&view=ops&live=board` の形で3つのタブ状態を持つ。
+ *
+ * 2026-08-14、上記の**作業手順ステッパー**（`STEPS`/`CURRENT_STEPS`）を削除した
+ * （馬場氏レビュー項目3・再設計 §2-1）。サブタブと表示内容が重複しており、
+ * ステップ2「条件を設定」と3「予報を確認」の遷移先がどちらも `ops` で同一だった。
  */
 
 const MODES = ["plan", "live", "visitor", "judge"] as const;
@@ -56,24 +60,6 @@ const ORGANIZER_TABS: [OrganizerView, string][] = [
   ["output", "計画書出力"],
   ["ingest", "会場を読み込む"],
 ];
-
-/** 作業手順。step→タブの対応があるものはクリックで遷移できる */
-const STEPS: { n: number; label: string; hint: string; goto?: OrganizerView }[] = [
-  { n: 1, label: "会場を読み込む", hint: "写真から初期モデルを生成", goto: "ingest" },
-  { n: 2, label: "条件を設定", hint: "実況の取込み or 手動入力", goto: "ops" },
-  { n: 3, label: "予報を確認", hint: "混雑・暑熱・日陰・What-if", goto: "ops" },
-  { n: 4, label: "出力する", hint: "指示書・計画書・ブリーフィング", goto: "output" },
-];
-
-/**
- * いま開いているタブ → 作業手順のどこにいるか。
- * 予報コンソールは「条件を設定」と「予報を確認」を1画面でやるので2と3の両方が現在地。
- */
-const CURRENT_STEPS: Record<OrganizerView, number[]> = {
-  ingest: [1],
-  ops: [2, 3],
-  output: [4],
-};
 
 /** URLの値は信用しない。許可リストに無ければ既定値へ倒す */
 function pick<T extends string>(raw: string | null, allowed: readonly T[], fallback: T): T {
@@ -156,7 +142,6 @@ function AppShellInner() {
         @media (max-width: 900px) {
           .cw-split { grid-template-columns: 1fr !important; }
           .cw-plan  { grid-template-columns: 1fr !important; }
-          .cw-steps { display: none !important; }
         }
       `}</style>
 
@@ -231,7 +216,7 @@ function AppShellInner() {
 
         {mode === "plan" && (
           <>
-            {/* 作業手順ステッパー + サブタブ */}
+            {/* サブタブ */}
             <div
               style={{
                 display: "flex",
@@ -274,70 +259,6 @@ function AppShellInner() {
                   </button>
                 ))}
               </nav>
-
-              <ol
-                className="cw-steps"
-                style={{
-                  listStyle: "none",
-                  margin: 0,
-                  marginLeft: "auto",
-                  padding: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 0,
-                }}
-              >
-                {STEPS.map((s, i) => {
-                  const current = CURRENT_STEPS[view].includes(s.n);
-                  return (
-                    <li key={s.n} style={{ display: "flex", alignItems: "center" }}>
-                      {i > 0 && (
-                        <span style={{ color: INK.textFaint, fontSize: 13, padding: "0 7px" }}>
-                          →
-                        </span>
-                      )}
-                      <button
-                        onClick={() => s.goto && goView(s.goto)}
-                        title={s.hint}
-                        aria-current={current ? "step" : undefined}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          minHeight: 44,
-                          background: current ? INK.raised : "transparent",
-                          border: "none",
-                          borderRadius: 9,
-                          boxShadow: current ? `inset 0 0 0 1px ${INK.line}` : "none",
-                          cursor: "pointer",
-                          padding: "2px 10px",
-                          color: current ? INK.text : INK.textDim,
-                        }}
-                      >
-                        <span
-                          className="cw-mono"
-                          style={{
-                            fontSize: 13,
-                            lineHeight: 1,
-                            border: `1px solid ${current ? INK.accent : INK.line}`,
-                            background: current ? INK.accent : "transparent",
-                            color: current ? INK.page : "inherit",
-                            borderRadius: 999,
-                            width: 18,
-                            height: 18,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          {s.n}
-                        </span>
-                        <span style={{ fontSize: 13, fontWeight: 600 }}>{s.label}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
             </div>
 
             {view === "ops" && <OpsConsole />}

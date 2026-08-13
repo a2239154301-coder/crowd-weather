@@ -14,6 +14,22 @@ import { EVIDENCE_SOURCES, INDEX100_PERSONS_PER_SQM } from "@/lib/forecast/evide
 export default function EvidencePanel() {
   return (
     <div style={{ display: "grid", gap: 14, maxWidth: 980, marginTop: 14 }}>
+      {/*
+        2026-08-14、予報コンソールの「リスク予報」レイヤーを削除し `/heatmap` へ一本化した際
+        （再設計 §2-2・§2-5）、この文はプロダクトの中核主張なので消さずここへ移設した。
+        審査モードは `/heatmap` のリスク地図とセットで説明できる位置にある。
+      */}
+      <section style={card}>
+        <h2 style={h2}>リスク予報 ── 「いま」ではなく「これから」</h2>
+        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.8, color: INK.textDim }}>
+          色は<b style={{ color: INK.text }}>いまの値ではなく、危険帯に入るまでの残り時間</b>。
+          判定は混雑が主で、WBGTが31℃以上のとき段を1つ上げる。
+          既存サービスが出せるのは「いま混んでいる場所」まで —
+          ここで出しているのは<b style={{ color: INK.text }}>これから危なくなる場所</b>。
+          このリスク地図は <code>/heatmap</code> で全画面表示できる。
+        </p>
+      </section>
+
       <section style={card}>
         <h2 style={h2}>モデルの根拠と限界</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 12 }}>

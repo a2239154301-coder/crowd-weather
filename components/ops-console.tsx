@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Scenario, Weather } from "@/lib/forecast/types";
-import { VENUE, zonesFor, DEFAULT_SCENARIO, HOURS } from "@/lib/forecast/venue";
+import { VENUE, DEFAULT_SCENARIO, HOURS } from "@/lib/forecast/venue";
 import { centroid, dayPlan, hourPeak } from "@/lib/forecast/model";
 import { fetchLiveWeather, geocode } from "@/lib/weather/open-meteo";
 import HourlyStrip from "./hourly-strip";
@@ -10,7 +10,7 @@ import ZoneTimeline from "./zone-timeline";
 import ArrivalList from "./arrival-list";
 import EntryPeak from "./entry-peak";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
-import { TIME_BANDS, arrivalOrder, venuePeakHour, zoneRisks } from "@/lib/forecast/risk";
+import { arrivalOrder, venuePeakHour, zoneRisks } from "@/lib/forecast/risk";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
 import VenueMap, { type MapLayer, type StaffMark } from "./venue-map";
 import SourceTag from "./source-tag";
@@ -34,8 +34,7 @@ export default function OpsConsole() {
   // 予報条件は全モード共有（計画で変えれば当日・計画書にもそのまま効く）
   const { scenario, setScenario, set } = useScenario();
   const [hour, setHour] = useState(15);
-  const [scope, setScope] = useState<"in" | "out">("in");
-  const [layer, setLayer] = useState<MapLayer>("risk");
+  const [layer, setLayer] = useState<MapLayer>("crowd");
 
   // NOWバッジ用の実時刻。SSRとの不一致を避けるためマウント後に取得。
   // 開催時間外は null（クランプすると朝9時に「11:00がNOW」と誤表示になる）
@@ -109,14 +108,11 @@ export default function OpsConsole() {
   const [aiBusy, setAiBusy] = useState(false);
   const [easyStyle, setEasyStyle] = useState(false);
 
-  // リスク予報は会場内外をまとめて出す。危険は終演時に
-  // 退場動線 → 駅前広場 → 改札 → ホーム と境界をまたいで移るので、分けると話が切れる。
-  // 画面・統計・AIへ渡す予報は、すべてこの zones に揃える
-  const zones = useMemo(
-    () => (layer === "risk" ? VENUE.zones : zonesFor(scope)),
-    [layer, scope]
-  );
-  const scopeLabel = layer === "risk" ? "会場内＋会場外" : scope === "in" ? "会場内" : "会場外";
+  // リスク予報レイヤーが「会場内＋会場外」合算だった前提を、2026-08-14に全画面へ統一した
+  // （再設計 §2-2）。危険は終演時に退場動線 → 駅前広場 → 改札 → ホーム と境界をまたいで
+  // 移るので、分けると話が切れる。画面・統計・AIへ渡す予報は、すべてこの zones に揃える
+  const zones = VENUE.zones;
+  const scopeLabel = "会場内＋会場外";
 
   const plan = useMemo(() => dayPlan(scenario), [scenario]);
   const now = useMemo(() => hourPeak(zones, hour, scenario), [zones, hour, scenario]);
@@ -202,7 +198,10 @@ export default function OpsConsole() {
     }
   }
 
-  // ── 多声ブリーフィング（同じ予報を3系統に書き分け・並列生成） ──
+  // ── 多声ブリーフィング（同じ予報を2系統に書き分け・並列生成） ──
+  // 2026-08-14、予報コンソールはディレクター向け・スタッフ向けの情報のみにする方針で
+  // 来場者向けを外した（再設計 §2-3）。来場者向けプロンプトはサーバー側に残しており、
+  // 来場者ページへ移すときに再利用する（lib/ai/prompts.ts の visitor system prompt）。
   type Brief = { text: string; meta: (AiMeta & { latencyMs: number }) | null; error?: boolean };
   const [briefs, setBriefs] = useState<Record<string, Brief> | null>(null);
   const [briefBusy, setBriefBusy] = useState(false);
@@ -213,7 +212,6 @@ export default function OpsConsole() {
     const audiences = [
       ["responsible", "警備責任者"],
       ["staff", "現場スタッフ"],
-      ["visitor", "来場者"],
     ] as const;
     const payload = forecastPayload();
     const results: Record<string, Brief> = {};
@@ -444,16 +442,6 @@ export default function OpsConsole() {
                 実況を取得できませんでした（手入力の値のまま）
               </div>
             )}
-            <div
-              style={{
-                marginBottom: 13,
-                fontSize: 13,
-                color: INK.textFaint,
-                lineHeight: 1.6,
-              }}
-            >
-              → 次は右の「2. 現場に出すべき指示」へ
-            </div>
             <Field label="天候">
               <div style={{ display: "flex", gap: 6 }}>
                 {(["sunny", "cloudy", "rainy"] as Weather[]).map((w) => (
@@ -594,32 +582,20 @@ export default function OpsConsole() {
         {/* ── 会場図 ──────────────────────────────── */}
         <section style={{ display: "grid", gap: 12, alignContent: "start" }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            {layer === "risk" ? (
-              <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: INK.textDim,
-                  border: `1px solid ${INK.line}`,
-                  borderRadius: 9,
-                  padding: "9px 13px",
-                }}
-              >
-                会場内＋会場外
-              </span>
-            ) : (
-              <Toggle
-                options={[
-                  ["in", "会場内"],
-                  ["out", "会場外"],
-                ]}
-                value={scope}
-                onChange={(v) => setScope(v as "in" | "out")}
-              />
-            )}
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: INK.textDim,
+                border: `1px solid ${INK.line}`,
+                borderRadius: 9,
+                padding: "9px 13px",
+              }}
+            >
+              会場内＋会場外
+            </span>
             <Toggle
               options={[
-                ["risk", "リスク予報"],
                 ["crowd", "混雑"],
                 ["heat", "暑熱・日陰"],
               ]}
@@ -661,26 +637,6 @@ export default function OpsConsole() {
             staff={staff}
           />
 
-          {layer === "risk" && (
-            <p
-              style={{
-                margin: 0,
-                fontSize: 13,
-                lineHeight: 1.8,
-                color: INK.textDim,
-                background: INK.raised,
-                border: `1px solid ${INK.line}`,
-                borderRadius: 10,
-                padding: "11px 13px",
-              }}
-            >
-              色は<b style={{ color: INK.text }}>いまの値ではなく、危険帯に入るまでの残り時間</b>。
-              判定は混雑が主で、WBGTが31℃以上のとき段を1つ上げる。
-              既存サービスが出せるのは「いま混んでいる場所」まで —
-              ここで出しているのは<b style={{ color: INK.text }}>これから危なくなる場所</b>。
-            </p>
-          )}
-
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
             <Stat
               label="最混雑"
@@ -702,27 +658,6 @@ export default function OpsConsole() {
             />
           </div>
 
-          {scope === "out" && (
-            <p
-              style={{
-                margin: 0,
-                fontSize: 13,
-                lineHeight: 1.8,
-                color: INK.textDim,
-                background: INK.raised,
-                border: `1px dashed ${INK.line}`,
-                borderRadius: 10,
-                padding: "11px 13px",
-              }}
-            >
-              事故の多くは会場の中ではなく、駅の連絡通路や帰り道で起きる。開場前は駅→ゲートの流入、
-              終演後は路地とホームへの逆流が詰まりの主因。
-              {plan.outsideDanger
-                ? "本シナリオでは商店街の路地が危険密度に達するため、鉄道事業者・警察との退場連携を推奨。"
-                : "本シナリオでは許容範囲。通常巡回でよい。"}
-            </p>
-          )}
-
           {/* ── AIアドバイザー ─────────────────────── */}
           <div
             style={{
@@ -739,12 +674,6 @@ export default function OpsConsole() {
                 </div>
                 <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>
                   この予報を、現場の言葉に翻訳する。
-                </div>
-                <div style={{ fontSize: 13, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
-                  <b style={{ color: INK.text }}>2. 現場に出すべき指示</b> =
-                  「〇時間後に〇〇のリスクが上がる → いま出す指示」の指示書。
-                  <b style={{ color: INK.text }}>運営判断を聞く</b> = 打ち手を4項目で。
-                  予報の計算そのものにLLMは使っていない。
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
@@ -766,24 +695,6 @@ export default function OpsConsole() {
                     }}
                   >
                     {aiBusy ? "起草中…" : "2. 現場に出すべき指示"}
-                  </button>
-                  <button
-                    onClick={() => askOrca("advice")}
-                    disabled={aiBusy}
-                    style={{
-                      minHeight: 44,
-                      padding: "12px 18px",
-                      borderRadius: 999,
-                      border: `1px solid ${INK.line}`,
-                      background: "transparent",
-                      color: aiBusy ? INK.textFaint : INK.textDim,
-                      fontWeight: 600,
-                      fontSize: 13,
-                      cursor: aiBusy ? "wait" : "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    運営判断を聞く
                   </button>
                 </div>
                 <label
@@ -865,7 +776,7 @@ export default function OpsConsole() {
               </div>
             )}
 
-            {/* ── 多声ブリーフィング: 同じ予報を3系統に書き分け ── */}
+            {/* ── 多声ブリーフィング: 同じ予報を2系統に書き分け ── */}
             <div
               style={{
                 marginTop: 13,
@@ -878,9 +789,7 @@ export default function OpsConsole() {
               }}
             >
               <div style={{ flex: 1, minWidth: 220, fontSize: 13, color: INK.textDim, lineHeight: 1.7 }}>
-                <b style={{ color: INK.text }}>3系統ブリーフィング</b> — 同じ予報を
-                「責任者（上位モデル）／スタッフ（軽量）／来場者（軽量・やさしい日本語）」へ
-                並列に書き分ける。適材適所のルーティングが一目で分かるデモ。
+                <b style={{ color: INK.text }}>2系統ブリーフィング</b> — 同じ予報を「責任者（上位モデル）／スタッフ（軽量）」へ並列に書き分ける。
               </div>
               <button
                 onClick={askBriefings}
@@ -897,20 +806,19 @@ export default function OpsConsole() {
                   cursor: briefBusy ? "wait" : "pointer",
                 }}
               >
-                {briefBusy ? "3系統を並列生成中…" : "3系統に配信文を作る"}
+                {briefBusy ? "2系統を並列生成中…" : "2系統に配信文を作る"}
               </button>
             </div>
 
             {briefs && (
               <div
                 className="cw-split"
-                style={{ marginTop: 11, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9 }}
+                style={{ marginTop: 11, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}
               >
                 {(
                   [
                     ["responsible", "警備責任者向け", "#C4B5FD"],
                     ["staff", "現場スタッフ向け", "#7DD3FC"],
-                    ["visitor", "来場者向け", "#86EFAC"],
                   ] as const
                 ).map(([key, label, color]) => {
                   const b = briefs[key];
@@ -962,8 +870,7 @@ export default function OpsConsole() {
               WHAT-IF — 言葉でシナリオを動かす
             </div>
             <div style={{ fontSize: 13, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
-              「もし17時に雷雨が来たら？」— AIは質問を条件変更に<b>翻訳するだけ</b>。
-              数字はすべて計算エンジンが出し直す（LLMに予測はさせない）。
+              「もし17時に雷雨が来たら？」— AIは条件変更に<b>翻訳するだけ</b>。数字は計算エンジンが出し直す。
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
               <input
@@ -1243,9 +1150,7 @@ function Legend({ layer }: { layer: MapLayer }) {
   const bands =
     layer === "crowd"
       ? [densityBand(10), densityBand(35), densityBand(60), densityBand(90)]
-      : layer === "heat"
-        ? [wbgtBand(23), wbgtBand(26), wbgtBand(29), wbgtBand(33)]
-        : [...TIME_BANDS].reverse();
+      : [wbgtBand(23), wbgtBand(26), wbgtBand(29), wbgtBand(33)];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto", flexWrap: "wrap" }}>
       {bands.map((b) => (
