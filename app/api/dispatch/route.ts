@@ -7,6 +7,10 @@ import {
   type DispatchStatus,
 } from "@/lib/ops/store";
 import { isValidZoneId, zoneById } from "@/lib/ops/staffing";
+import { rosterByName } from "@/lib/data/roster";
+
+/** ポストコードの書式（例 "B-1"・"R-12"）。実在検証はクライアント側のピッカーが担う */
+const POST_CODE_RE = /^[A-Z]-\d{1,2}$/;
 
 /**
  * 指示の配信と状態遷移。
@@ -29,6 +33,7 @@ export async function POST(req: Request) {
     staffName?: unknown;
     fromCode?: unknown;
     toZoneId?: unknown;
+    toPostCode?: unknown;
     action?: unknown;
     urgency?: unknown;
     reason?: unknown;
@@ -51,20 +56,29 @@ export async function POST(req: Request) {
   }
   // 宛先スタッフの実在チェック（レビュー指摘 2026-08-13）。
   // 受信箱は名前の完全一致でフィルタするため、表記ゆれの指示は「配信成功に見えて誰にも届かない」。
-  // AI提案のstaffNameが登録名とズレていたらここで400にし、承認者に見えるエラーで返す
+  // AI提案のstaffNameが登録名とズレていたらここで400にし、承認者に見えるエラーで返す。
+  // 名簿メンバーへは未接続でも事前配置指示を出せる（本人がページを開くと受信箱に見える）。
+  // 追加されるのは静的23名のみで有界
   const staff = await listStaff();
-  if (!staff.some((s) => s.name === staffName)) {
+  if (!staff.some((s) => s.name === staffName) && !rosterByName(staffName)) {
     return NextResponse.json(
-      { error: `スタッフ「${staffName}」は入場していません（名前の表記を確認）` },
+      { error: `スタッフ「${staffName}」は入場しておらず、名簿にもありません（名前の表記を確認）` },
       { status: 400 }
     );
   }
+
+  // ポストの実在検証はサーバーでは不可能（postsFor はクライアントの scenario 依存で
+  // サーバーは現在の scenario を知らない）。実在保証は配置UIのピッカー（実在ポストしか
+  // 出さない）が担う。ここでは書式検証のみ行い、不一致なら黙って無視する
+  const toPostCodeRaw = typeof body.toPostCode === "string" ? body.toPostCode.slice(0, 8) : "";
+  const toPostCode = POST_CODE_RE.test(toPostCodeRaw) ? toPostCodeRaw : undefined;
 
   const dispatch = await addDispatch({
     staffName,
     fromCode: typeof body.fromCode === "string" ? body.fromCode.slice(0, 8) : "",
     toZoneId,
     toZoneName: zoneById(toZoneId)?.name ?? toZoneId,
+    toPostCode,
     action,
     urgency: body.urgency === "now" ? "now" : "soon",
     reason: typeof body.reason === "string" ? body.reason.slice(0, 120) : "",

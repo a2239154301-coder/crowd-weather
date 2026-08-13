@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { listStaff, upsertStaff, type StaffState } from "@/lib/ops/store";
 import { isValidZoneId } from "@/lib/ops/staffing";
+import { rosterByName } from "@/lib/data/roster";
 
 /**
  * スタッフの入場・状態更新・一覧。
@@ -10,7 +11,7 @@ import { isValidZoneId } from "@/lib/ops/staffing";
  */
 
 const STATES: StaffState[] = ["onpost", "moving", "away"];
-const ROLES = ["water", "guide", "aid"] as const;
+const ROLES = ["water", "guide", "aid", "reception"] as const;
 
 export async function GET() {
   return NextResponse.json({ staff: await listStaff() });
@@ -38,10 +39,14 @@ export async function POST(req: Request) {
     : "guide";
   const postCode = typeof body.postCode === "string" ? body.postCode.slice(0, 8) : "";
   const zoneId = typeof body.zoneId === "string" && isValidZoneId(body.zoneId) ? body.zoneId : "";
-  if (!postCode || !zoneId) {
+  const state = STATES.includes(body.state as StaffState) ? (body.state as StaffState) : "onpost";
+  // presence登録=スタッフが自分の固定ページ（/staff/[id]）を開いた時の"接続"記録。
+  // 任意名で空レコードを作れる緩和にはしない（名簿の静的23名のみ）
+  const isPresenceRegistration =
+    postCode === "" && zoneId === "" && state === "away" && Boolean(rosterByName(name));
+  if (!isPresenceRegistration && (!postCode || !zoneId)) {
     return NextResponse.json({ error: "postCode and valid zoneId are required" }, { status: 400 });
   }
-  const state = STATES.includes(body.state as StaffState) ? (body.state as StaffState) : "onpost";
   const note = typeof body.note === "string" ? body.note.slice(0, 60) : undefined;
 
   const staff = await upsertStaff({ name, role, postCode, zoneId, state, note });

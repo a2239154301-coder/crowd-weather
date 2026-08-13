@@ -56,6 +56,11 @@ export type Dispatch = {
   fromCode: string;
   toZoneId: string;
   toZoneName: string;
+  /**
+   * 移動先の配置ポストコード（例 "B-1"）。表示と、スタッフの着任時にポストを確定するために使う。
+   * ゾーンの実在検証は従来どおり toZoneId が担い、これは表示用の任意項目
+   */
+  toPostCode?: string;
   action: string;
   urgency: "now" | "soon";
   reason: string;
@@ -164,6 +169,7 @@ export async function addDispatch(
     await upSet("cw:dispatches", all.slice(-200));
   } else {
     mem().dispatches.push(full);
+    if (mem().dispatches.length > 200) mem().dispatches.splice(0, mem().dispatches.length - 200);
   }
   return full;
 }
