@@ -93,7 +93,13 @@ export function latestDispatchFor(name: string, dispatches: Dispatch[]): Dispatc
 
 // ── マップ描画 ────────────────────────────────────────────────────
 
-export type BoardMark = { at: Point; role: PostRole; label: string; glyph: string };
+/**
+ * `zoneId` はドラッグ&ドロップの当たり判定用（2026-08-13 追加）。
+ * 会場図ではスタッフの丸はゾーンの `<g>` の**兄弟**として描かれるため、丸の上で指を離すと
+ * `closest("[data-zone-id]")` が親を辿っても何も見つからない（＝空席の丸を狙って落とすという
+ * 一番自然な操作がデッドスポットになる）。丸自身にゾーンを持たせて解消する。
+ */
+export type BoardMark = { at: Point; role: PostRole; label: string; glyph: string; zoneId: string };
 
 export type GhostMark = { from: Point | null; to: Point; glyph: string; kind: "sent" | "moving" };
 
@@ -153,6 +159,7 @@ export function buildBoardMarks(staffList: Staff[], posts: Post[], dispatches: D
         role: s.role,
         label: s.postCode,
         glyph: s.name.charAt(0),
+        zoneId,
       });
       entryStaff.push(s);
     });
@@ -168,7 +175,7 @@ export function buildBoardMarks(staffList: Staff[], posts: Post[], dispatches: D
     const occupied = byZone.get(zoneId)?.length ?? 0;
     for (const p of zonePosts.slice(occupied)) {
       dimmedIdx.add(marks.length);
-      marks.push({ at: p.at, role: p.role, label: p.code, glyph: ROLE_GLYPH[p.role] });
+      marks.push({ at: p.at, role: p.role, label: p.code, glyph: ROLE_GLYPH[p.role], zoneId });
       entryStaff.push(null);
     }
   });

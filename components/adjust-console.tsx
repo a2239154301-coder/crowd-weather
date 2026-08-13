@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DAY } from "@/lib/ui/day-theme";
 import { useScenario } from "@/lib/ui/scenario-context";
 import { dayPlan, forecastZones } from "@/lib/forecast/model";
 import { HOURS, VENUE } from "@/lib/forecast/venue";
-import { postsFor, ROLE_LABEL, zoneById } from "@/lib/ops/staffing";
+import { postsFor, zoneById } from "@/lib/ops/staffing";
 import { ROSTER } from "@/lib/data/roster";
 import { isAssignedTo, latestDispatchFor, memberBadge } from "@/lib/ops/board";
 import {
@@ -14,10 +14,10 @@ import {
   correctedDensity,
   type Observation,
 } from "@/lib/forecast/nowcast";
+import { useNowcast } from "@/lib/ui/use-nowcast";
 import { evidenceLabel, evidencePlain } from "@/lib/forecast/evidence";
 import SourceTag from "./source-tag";
 import { applyDemand } from "@/lib/forecast/demand";
-import { timetableContext } from "@/lib/data/timetable";
 import { CAMERAS, latestFrames, cameraSeries } from "@/lib/data/camera";
 import { historyCurves } from "@/lib/data/history";
 import { simulateEgress, defaultEgress, regulatedEgress } from "@/lib/forecast/egress";
@@ -28,25 +28,19 @@ import { useSyncStatus } from "@/lib/ui/use-polling";
 /**
  * 調整コンソール — 計画と実際のAdjustmentを行う司令塔（当日モード「調整」ビュー）。
  *
- * 5つの部品で「観測 → 統合 → 補正 → 提案 → 承認・配信」のループを1画面に収める:
+ * 「観測 → 統合 → 補正 → 提案 → 承認・配信」のループのうち、観測〜補正までをここで扱う:
  *  1. 観測フィード（スタッフ報告＋カメラ実測。デモデータは明記）
  *  2. 分析チャート（予測 × カメラ × 報告 × 補正後 の重ね描き）
- *  3. 配置ボード（ポスト×スタッフ状態。古い状態の明示・手動補正）
- *  4. AI提案（/api/propose）→ 4'. 人間の承認 → /api/dispatch 配信
+ *  3. 配置サマリー（盤面・メンバーリスト・移動指示は「配置」タブへ移設 2026-08-13）
+ *
+ * AI提案（/api/propose）→ 人間の承認 → /api/dispatch 配信 は「配置」タブへ移設した
+ * （2026-08-13。配信の入口を1箇所に集約するため。実体は components/board/proposal-panel.tsx）。
+ * 観測の統合・予測の補正（決定的計算）は両者で共有するため lib/ui/use-nowcast.ts に格上げした。
  *
  * 統合・補正は決定的（nowcast.ts）。LLMは報告の構造化と提案起草だけ（CLAUDE.md改訂ルール）。
  */
 
 const POLL_MS = 5000;
-
-type Proposal = {
-  staffName: string;
-  fromCode: string;
-  toZoneId: string;
-  action: string;
-  urgency: string;
-  reason: string;
-};
 
 export default function AdjustConsole({ onOpenBoard }: { onOpenBoard?: () => void } = {}) {
   const { scenario } = useScenario();
@@ -56,42 +50,18 @@ export default function AdjustConsole({ onOpenBoard }: { onOpenBoard?: () => voi
   const [reports, setReports] = useState<Report[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [dispatches, setDispatches] = useState<Dispatch[]>([]);
-  const [proposals, setProposals] = useState<Proposal[] | null>(null);
   // 写真ナウキャスト: 採用済みの写真観測（人間確認を経たものだけが観測に入る）
   const [photoObs, setPhotoObs] = useState<Observation[]>([]);
-  const [proposalNote, setProposalNote] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiMetaLine, setAiMetaLine] = useState("");
 
   const plan = useMemo(() => dayPlan(scenario), [scenario]);
   const posts = useMemo(() => postsFor(plan), [plan]);
   const nowMinutes = hour * 60;
 
-  // カメラの絶対値化に使う「現シナリオの予測」関数（時刻間は線形補間・時刻ごとにメモ）
-  const densityOf = useMemo(() => {
-    const cache = new Map<number, Map<string, number>>();
-    const byHour = (h: number) => {
-      let m = cache.get(h);
-      if (!m) {
-        m = new Map(
-          forecastZones(VENUE.zones, h, scenario).map((f) => [
-            f.zone.id,
-            applyDemand(f.zone, f.density, h),
-          ])
-        );
-        cache.set(h, m);
-      }
-      return m;
-    };
-    return (zoneId: string, hourFloat: number) => {
-      const h0 = Math.max(VENUE.open, Math.floor(hourFloat));
-      const h1 = Math.min(VENUE.close, h0 + 1);
-      const t = hourFloat - h0;
-      const d0 = byHour(h0).get(zoneId) ?? 0;
-      const d1 = byHour(h1).get(zoneId) ?? 0;
-      return d0 * (1 - t) + d1 * t;
-    };
-  }, [scenario]);
+  // ── 観測の統合・予測の補正（決定的・useNowcastへ集約 2026-08-13）──
+  // 元は densityOf/observations/corrected の3つのuseMemoがここに直接あったが、
+  // 「配置」タブのAI提案パネルでも同じ統合・補正が要るため共有フックへ格上げした
+  // （ロジック自体は1行も変えていない。lib/ui/use-nowcast.ts 参照）
+  const { observations, corrected, densityOf } = useNowcast(hour, scenario, reports, photoObs);
 
   // ── ポーリング（報告・スタッフ・指示） ──
   const sync = useSyncStatus();
@@ -122,122 +92,9 @@ export default function AdjustConsole({ onOpenBoard }: { onOpenBoard?: () => voi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── 観測の組み立て（カメラ=デモデータ・報告=store） ──
-  const observations = useMemo<Observation[]>(() => {
-    const obs: Observation[] = latestFrames(nowMinutes, densityOf).map((f) => ({
-      zoneId: f.zoneId,
-      minutes: f.minutes,
-      impliedDensity: f.impliedDensity,
-      source: "camera" as const,
-    }));
-    // スタッフ報告: 1-5 → 指数換算（1→15 / 2→35 / 3→55 / 4→75 / 5→95）。crowd系のみ密度観測になる
-    for (const r of reports) {
-      if (r.kind !== "crowd") continue;
-      obs.push({
-        zoneId: r.zoneId,
-        minutes: nowMinutes, // 報告は「いま」の観測として扱う（デモは実時刻とシミュ時刻が混ざるため）
-        impliedDensity: 15 + (r.level - 1) * 20,
-        source: r.source,
-      });
-    }
-    // 写真観測（人間が「採用」したものだけ）
-    for (const p of photoObs) obs.push(p);
-    return obs;
-  }, [nowMinutes, reports, densityOf, photoObs]);
-
-  // ── 予測と補正（決定的） ──
-  const zones = VENUE.zones;
-  const corrected = useMemo(() => {
-    const fc = forecastZones(zones, hour, scenario);
-    return fc.map((f) => {
-      const withDemand = applyDemand(f.zone, f.density, hour);
-      const fusion = fuseObservations(observations, f.zone.id, nowMinutes);
-      const age = fusion.latestMinutes === null ? Infinity : nowMinutes - fusion.latestMinutes;
-      const factor = correctionFactor(fusion.fusedDensity, withDemand, age === Infinity ? 999 : age);
-      return {
-        zone: f.zone,
-        predicted: withDemand,
-        observed: fusion.fusedDensity,
-        conflict: fusion.conflict,
-        correctedValue: correctedDensity(withDemand, factor),
-        factor,
-      };
-    });
-  }, [zones, hour, scenario, observations, nowMinutes]);
-
   const bigGaps = corrected
     .filter((c) => Math.abs(c.correctedValue - c.predicted) >= 10)
     .sort((a, b) => Math.abs(b.correctedValue - b.predicted) - Math.abs(a.correctedValue - a.predicted));
-
-  // ── AI提案 ──
-  const askProposal = useCallback(async () => {
-    setAiBusy(true);
-    setProposals(null);
-    setProposalNote("");
-    const t0 = Date.now();
-    try {
-      const context = {
-        hour: `${hour}:00`,
-        timetable: timetableContext(hour),
-        risky: corrected
-          .filter((c) => c.correctedValue >= 60)
-          .map((c) => ({
-            zoneId: c.zone.id,
-            zone: c.zone.name,
-            予測: c.predicted,
-            補正後: c.correctedValue,
-            観測あり: c.observed !== null,
-            食い違い: c.conflict,
-          })),
-        現在配置: staffList.map((s) => ({
-          name: s.name,
-          post: s.postCode,
-          zone: zoneById(s.zoneId)?.name ?? s.zoneId,
-          role: ROLE_LABEL[s.role],
-          state: s.state,
-        })),
-        直近の報告: reports.slice(0, 6).map((r) => `${zoneById(r.zoneId)?.name}: ${r.summary}（${r.name}）`),
-      };
-      const res = await fetch("/api/propose", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error);
-      setProposals(data.proposals ?? []);
-      setProposalNote(data.note ?? "");
-      const served = data.meta?.resolvedModel ?? data.meta?.servedModel ?? "";
-      setAiMetaLine(`${served} ／ ${((Date.now() - t0) / 1000).toFixed(1)}s${data.rejected ? ` ／ 範囲外提案${data.rejected}件を棄却` : ""}`);
-    } catch {
-      setProposalNote("提案を取得できませんでした");
-      setProposals([]);
-    } finally {
-      setAiBusy(false);
-    }
-  }, [hour, corrected, staffList, reports]);
-
-  /** 承認 = このボタンだけが配信の入口（AIは提案まで）。連打による重複配信を防ぐ */
-  const [approving, setApproving] = useState<Proposal | null>(null);
-  async function approve(p: Proposal) {
-    if (approving) return;
-    setApproving(p);
-    try {
-      const res = await fetch("/api/dispatch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...p }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setProposalNote(`配信できませんでした: ${data?.error ?? res.status}`);
-        return;
-      }
-      setProposals((prev) => (prev ? prev.filter((x) => x !== p) : prev));
-    } finally {
-      setApproving(null);
-    }
-  }
 
   const selZone = zoneById(zoneSel);
 
@@ -383,8 +240,13 @@ export default function AdjustConsole({ onOpenBoard }: { onOpenBoard?: () => voi
               </span>
             ))}
           </div>
-          <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 8 }}>
+          <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 4 }}>
             メンバーの一覧・マップ・移動指示は「配置」タブに集約
+          </div>
+          {/* AI配置提案は「配置」タブへ移しました（2026-08-13）。配信の入口を1箇所に集約するため、
+              このコンソールからは提案パネルを呼ばない（ProposalPanelは components/board/proposal-panel.tsx） */}
+          <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 8 }}>
+            AI配置提案は「配置」タブへ移しました
           </div>
           <button
             onClick={onOpenBoard}
@@ -402,37 +264,6 @@ export default function AdjustConsole({ onOpenBoard }: { onOpenBoard?: () => voi
           >
             配置タブを開く
           </button>
-        </section>
-
-        {/* ── 4. AI提案 → 承認 → 配信 ── */}
-        <section style={{ ...panel, borderColor: DAY.text, borderWidth: 2 }}>
-          <h3 style={{ ...h3, display: "flex", alignItems: "center", gap: 8 }}>
-            AI配置提案（承認するまで配信されない）
-            <SourceTag kind="ai" tone="day" />
-          </h3>
-          <button onClick={askProposal} disabled={aiBusy} style={{ width: "100%", minHeight: 52, borderRadius: 10, border: "none", background: aiBusy ? "#93A3C0" : DAY.text, color: "#FFF", fontSize: 15, fontWeight: 700, cursor: aiBusy ? "wait" : "pointer" }}>
-            {aiBusy ? "起草中…" : "観測と予報から提案を作る"}
-          </button>
-          {aiMetaLine && <div className="cw-mono" style={{ fontSize: 13, color: DAY.textFaint, marginTop: 4 }}>{aiMetaLine}</div>}
-          {proposalNote && <p style={{ margin: "8px 0 0", fontSize: 13, color: DAY.textDim }}>{proposalNote}</p>}
-          {proposals?.map((p, i) => (
-            <div key={i} style={{ background: "#FFF", border: `1px solid ${DAY.line}`, borderRadius: 10, padding: "10px 12px", marginTop: 8 }}>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>
-                {p.fromCode} {p.staffName} → {zoneById(p.toZoneId)?.name ?? p.toZoneId}
-                {p.urgency === "now" && <span style={{ marginLeft: 6, color: DAY.danger, fontSize: 13 }}>いますぐ</span>}
-              </div>
-              <div style={{ fontSize: 13, margin: "2px 0" }}>{p.action}</div>
-              <div style={{ fontSize: 13, color: DAY.textFaint }}>{p.reason}</div>
-              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                <button onClick={() => approve(p)} disabled={approving !== null} style={{ flex: 1, minHeight: 44, borderRadius: 9, border: "none", background: approving ? "#93A3C0" : DAY.text, color: "#FFF", fontWeight: 700, fontSize: 15, cursor: approving ? "wait" : "pointer" }}>
-                  {approving === p ? "配信中…" : "承認して配信"}
-                </button>
-                <button onClick={() => setProposals((prev) => (prev ? prev.filter((x) => x !== p) : prev))} style={{ flex: 1, minHeight: 44, borderRadius: 9, border: `1px solid ${DAY.line}`, background: "#FFF", fontSize: 15, cursor: "pointer" }}>
-                  却下
-                </button>
-              </div>
-            </div>
-          ))}
         </section>
       </div>
 

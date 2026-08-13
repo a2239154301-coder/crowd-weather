@@ -15,13 +15,33 @@ import type { PostRole } from "@/lib/ops/staffing";
 export type MapLayer = "crowd" | "heat" | "risk";
 
 /** role は staffing.ts の PostRole をそのまま使う（二重管理にしない） */
-export type StaffMark = { at: Point; role: PostRole; label: string; glyph?: string };
+export type StaffMark = {
+  at: Point;
+  role: PostRole;
+  label: string;
+  glyph?: string;
+  /**
+   * この丸が属するゾーン（配置ボードのD&D 2026-08-13 追加）。
+   * 丸はゾーンの `<g>` の兄弟として描かれるため、丸の上でドロップされたときに
+   * `closest("[data-zone-id]")` で親を辿ってもゾーンに行き着かない。丸自身に持たせる。
+   * 未指定なら従来どおり `data-zone-id` を出さない（計画コンソール等の既存呼び出しは無変更）。
+   */
+  zoneId?: string;
+};
 
 /**
  * 移動指示の可視化（配置ボード 2026-08-13 追加）。`lib/ops/board.ts` の `GhostMark` と
  * 構造的に同一（意図的に別定義: venue-map はops層に依存しない）。
  */
-export type GhostMark = { from: Point | null; to: Point; glyph: string; kind: "sent" | "moving" };
+/**
+ * kind の意味（凡例と1対1で対応させること）:
+ *  - sent     = 配信済み・未応答（グレー）
+ *  - moving   = 本人が「移動します」と応答済み（青）
+ *  - proposal = **まだ配信していないAIの提案**（橙）。提案カードにhover/focusした1件だけを描く。
+ *               2026-08-13 追加。sent と同じグレーで描くと「もう指示が飛んでいる」に見えてしまい、
+ *               承認前と承認後の区別がつかない（＝人間承認が唯一の入口という設計が画面上で曖昧になる）
+ */
+export type GhostMark = { from: Point | null; to: Point; glyph: string; kind: "sent" | "moving" | "proposal" };
 
 /**
  * 地面と建物の明度（2026-08-12 引き上げ）。
@@ -112,10 +132,30 @@ type Props = {
   onZoneClick?: (zoneId: string) => void;
   /** ゾーン別人数バッジ {zoneId: 人数}。ゾーンラベルの上に「N人」ピルを描く */
   zoneBadges?: Record<string, number>;
-  /** マーカーの薄表示index集合（空席ポスト用・クリック不可・opacity 0.35） */
+  /**
+   * 空席ポストのindex集合（クリック不可）。
+   *
+   * 2026-08-13 改訂: 当初はロール色ベタ塗り丸を `opacity: 0.35` で一括減光していたが、
+   * それが「薄い人」＝AIの配置案に見えるという誤解（中橋氏レビュー指摘）を招いていた。
+   * 現在は下の「5. スタッフ配置」で塗りをやめ、細実線の空枠として描く（prop名・集合の意味は変わらない）。
+   */
   dimmedStaffIndices?: ReadonlySet<number>;
   /** アクティブな移動指示の点線マーカー（配置ボード 2026-08-13 追加）。未指定時は従来描画と一致 */
   ghostMarks?: GhostMark[];
+  /**
+   * スタッフ丸の下のポストコード表示（配置ボード 2026-08-13 追加）。
+   * "all"=常時（既定・従来動作を厳密に維持） / "focus"=選択中・hover中・labelStaffIndices のみ。
+   * 全マーカーに常時ラベルが出ると隣のゾーン名・ラベルと重なって読めなくなるため、
+   * 密集した会場図では "focus" を使う（呼び出し側は配置ボードから staff-board.tsx 参照）。
+   */
+  staffLabelMode?: "all" | "focus";
+  /** staffLabelMode="focus" のとき、追加でラベルを出すindex集合（ドラッグ中の候補ポスト用） */
+  labelStaffIndices?: ReadonlySet<number>;
+  /**
+   * ドラッグ中にドロップ先として強調するゾーン（配置ボードのD&D 2026-08-13 追加）。
+   * 白い太枠＋塗り強めで「ここに落ちる」を示す。未指定時は従来描画と一致。
+   */
+  highlightZoneId?: string | null;
 };
 
 export default function VenueMap({
@@ -134,8 +174,13 @@ export default function VenueMap({
   zoneBadges,
   dimmedStaffIndices,
   ghostMarks,
+  staffLabelMode = "all",
+  labelStaffIndices,
+  highlightZoneId = null,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
+  /** ポストコードラベルの hover 表示用（2026-08-13 追加）。staffLabelMode="focus" のときだけ意味を持つ */
+  const [hoveredStaff, setHoveredStaff] = useState<number | null>(null);
 
   const shadows = useMemo(
     () => shadowsAt(hour, scenario.date, scenario.geo),
@@ -203,6 +248,10 @@ export default function VenueMap({
           <marker id="cw-ghost-arrow-moving" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto-start-reverse">
             <path d="M0,0 L8,4 L0,8 Z" fill="#38BDF8" />
           </marker>
+          {/* 未配信のAI提案（橙）。承認前であることを色で区別する */}
+          <marker id="cw-ghost-arrow-proposal" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto-start-reverse">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#FB7A1E" />
+          </marker>
         </defs>
 
         {/* 1. 地面 */}
@@ -260,9 +309,16 @@ export default function VenueMap({
           const isHover = hovered === f.zone.id;
           const thin = bboxHeight(f.zone.shape) < THIN_ZONE;
           const zoneClickable = Boolean(onZoneClick);
+          const dropOver = highlightZoneId === f.zone.id;
           return (
             <g
               key={f.zone.id}
+              /* ドラッグ中のドロップ先判定に使う（use-drag-to-map.ts）。
+                 SVG座標の逆変換（getScreenCTM）ではなく document.elementFromPoint +
+                 closest("[data-zone-id]") でブラウザのヒットテストに任せるため、
+                 ゾーンの識別子をDOM属性として持たせる。重なっているゾーン（corr/plaza）は
+                 描画順で上のものが返る＝見えているほうが選ばれるので、これが正しい挙動 */
+              data-zone-id={f.zone.id}
               onMouseEnter={() => setHovered(f.zone.id)}
               onMouseLeave={() => setHovered(null)}
               onClick={zoneClickable ? () => onZoneClick!(f.zone.id) : undefined}
@@ -287,10 +343,10 @@ export default function VenueMap({
               <path
                 d={toPath(f.zone.shape)}
                 fill={band.color}
-                fillOpacity={dimmed ? 0.07 : isHover ? 0.4 : 0.26}
-                stroke={band.color}
+                fillOpacity={dimmed ? 0.07 : dropOver ? 0.42 : isHover ? 0.4 : 0.26}
+                stroke={dropOver ? "#FFFFFF" : band.color}
                 strokeOpacity={dimmed ? 0.35 : 1}
-                strokeWidth={isHover ? 2.4 : 1.6}
+                strokeWidth={dropOver ? 3.2 : isHover ? 2.4 : 1.6}
                 style={{ transition: "fill 450ms ease, fill-opacity 200ms ease, stroke-width 120ms ease" }}
               />
               {critical && !dimmed && <path d={toPath(f.zone.shape)} fill="url(#cw-hatch)" />}
@@ -414,7 +470,8 @@ export default function VenueMap({
         {/* 4.6 ゴーストマーク（配置ボード 移動指示の可視化・2026-08-13 追加） */}
         {!compact &&
           ghostMarks?.map((g, i) => {
-            const color = g.kind === "moving" ? "#38BDF8" : "#94A3B8";
+            const color =
+              g.kind === "moving" ? "#38BDF8" : g.kind === "proposal" ? "#FB7A1E" : "#94A3B8";
             return (
               <g key={i} style={{ pointerEvents: "none" }}>
                 {g.from && (
@@ -439,13 +496,37 @@ export default function VenueMap({
 
         {/* 5. スタッフ配置 */}
         {staff?.map((m, i) => {
-          const dimmed = dimmedStaffIndices?.has(i) ?? false;
+          const vacant = dimmedStaffIndices?.has(i) ?? false;
           const selected = selectedStaffIndex === i;
-          const clickable = !dimmed && Boolean(onStaffClick);
+          const clickable = !vacant && Boolean(onStaffClick);
+          /**
+           * ラベル（マーカー下のポストコード）を描くかどうか。
+           * "all" は従来どおり常時（!compactの中で無条件true）。"focus" は選択中・hover中・
+           * labelStaffIndices指定のいずれかのみ — 全マーカー常時表示だと隣のラベルと重なるため。
+           */
+          const showLabel =
+            !compact &&
+            (staffLabelMode === "all" || selected || hoveredStaff === i || (labelStaffIndices?.has(i) ?? false));
           return (
             <g
               key={i}
-              opacity={dimmed ? 0.35 : 1}
+              /* 空席ポストにだけコードを持たせる。ドラッグして空席の丸の上で離したときは
+                 移動先ポストまで確定させる（ゾーンに落ちた場合は最初の空きポストに任せる）。
+                 着任済みスタッフの丸には付けない — そこへドロップしても行き先にならないため */
+              data-post-code={vacant ? m.label : undefined}
+              /* 丸の上でドロップされたときの行き先。ゾーンの<g>とは兄弟なので、
+                 これが無いと closest("[data-zone-id]") が空振りして「丸を狙って落とす」が効かない */
+              data-zone-id={m.zoneId}
+              opacity={vacant ? 0.75 : 1}
+              /* hover追跡は "focus" のときだけ張る。"all"（計画コンソール等の既存呼び出し）は
+                 ラベルが常時出ていて hover を見る必要がなく、マーカーを撫でるたびに
+                 setState で再レンダーさせる理由がない（既存呼び出しの挙動を変えない） */
+              onMouseEnter={staffLabelMode === "focus" ? () => setHoveredStaff(i) : undefined}
+              onMouseLeave={
+                staffLabelMode === "focus"
+                  ? () => setHoveredStaff((prev) => (prev === i ? null : prev))
+                  : undefined
+              }
               onClick={
                 clickable
                   ? (e) => {
@@ -459,19 +540,41 @@ export default function VenueMap({
               {selected && (
                 <circle cx={m.at.x} cy={m.at.y} r={17} fill="none" stroke="#FFFFFF" strokeWidth={3} />
               )}
-              <circle cx={m.at.x} cy={m.at.y} r={13} fill={ROLE_COLOR[m.role]} stroke="#0A0E17" strokeWidth={2.5} />
+              {vacant ? (
+                /*
+                 * 空席ポスト（2026-08-13 改訂）: 従来はロール色ベタ塗りを <g opacity={0.35}> で
+                 * 一括減光していたが、「薄い人」＝AIが仮に置いた配置案に見えるという誤解を招いていた
+                 * （中橋氏レビュー指摘）。塗りをやめ、細実線の空枠にする。
+                 * strokeDasharray は付けない — 点線は ghostMarks（移動指示中）が既に使っている意味
+                 * なので、ここでも点線にすると「空席」と「移動指示中」の区別がつかなくなる。
+                 * fill="none" だと内側がヒットテスト対象から外れる（デフォルトpointer-eventsは
+                 * visiblePainted）ため、hover でラベルを出す挙動（staffLabelMode="focus"）が
+                 * 円の内側では働かない。pointerEvents:"all" で丸全体をhover対象にする。
+                 */
+                <circle
+                  cx={m.at.x}
+                  cy={m.at.y}
+                  r={13}
+                  fill="none"
+                  stroke={ROLE_COLOR[m.role]}
+                  strokeWidth={1.6}
+                  style={{ pointerEvents: "all" }}
+                />
+              ) : (
+                <circle cx={m.at.x} cy={m.at.y} r={13} fill={ROLE_COLOR[m.role]} stroke="#0A0E17" strokeWidth={2.5} />
+              )}
               <text
                 x={m.at.x}
                 y={m.at.y + 5}
                 textAnchor="middle"
-                fontSize={13}
+                fontSize={vacant ? 11 : 13}
                 fontWeight={700}
-                fill="#0A0E17"
+                fill={vacant ? INK.textDim : "#0A0E17"}
                 style={{ pointerEvents: "none" }}
               >
                 {m.glyph ?? ROLE_GLYPH[m.role]}
               </text>
-              {!compact && (
+              {showLabel && (
                 <text
                   x={m.at.x}
                   y={m.at.y + 18}

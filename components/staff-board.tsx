@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DAY } from "@/lib/ui/day-theme";
 import { useScenario } from "@/lib/ui/scenario-context";
-import { dayPlan } from "@/lib/forecast/model";
+import { centroid, dayPlan } from "@/lib/forecast/model";
 import { VENUE, zonesFor } from "@/lib/forecast/venue";
 import { postsFor, ROLE_LABEL, zoneById, type PostRole } from "@/lib/ops/staffing";
 import { ROSTER, rosterByName, type RosterGroup, type RosterMember } from "@/lib/data/roster";
+import { timetableContext } from "@/lib/data/timetable";
 import {
   buildBoardMarks,
   isAssignedTo,
@@ -15,11 +16,14 @@ import {
   postCodeLabel,
   type MemberStatus,
 } from "@/lib/ops/board";
-import VenueMap from "./venue-map";
-import type { Dispatch, Staff } from "@/lib/ops/store";
+import VenueMap, { type GhostMark } from "./venue-map";
+import type { Dispatch, Report, Staff } from "@/lib/ops/store";
 import StoreStatus from "./store-status";
 import SyncBadge from "./sync-badge";
 import { useSyncStatus } from "@/lib/ui/use-polling";
+import { useDragToMap } from "@/lib/ui/use-drag-to-map";
+import InitialPlanPanel from "./board/initial-plan-panel";
+import ProposalPanel, { type Proposal } from "./board/proposal-panel";
 
 /**
  * 配置ボード（当日モード「配置」タブ）— 名簿（リスト）と会場図（マップ）の二重体制。
@@ -97,6 +101,17 @@ export default function StaffBoard() {
 
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [dispatches, setDispatches] = useState<Dispatch[]>([]);
+  /** AI移動提案パネルがナウキャスト補正に使う（提案の根拠になる観測）。2026-08-13 追加 */
+  const [reports, setReports] = useState<Report[]>([]);
+
+  /**
+   * 上部パネルの表示（排他）。「初期は配置案・途中は移動提案」を既定の切替で表現する。
+   * 手動で切り替えたらそれを尊重する（`panelTab === null` の間だけ自動判定に従う）。
+   */
+  const [panelTab, setPanelTab] = useState<"initial" | "move" | null>(null);
+  /** AI移動提案の一覧と、hover/focus中のindex。マップに1件だけゴーストを重ねるために親が持つ */
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [focusedProposal, setFocusedProposal] = useState<number | null>(null);
 
   const [selName, setSelName] = useState<string | null>(null);
   const [moveTargetZoneId, setMoveTargetZoneId] = useState<string | null>(null);
@@ -122,13 +137,17 @@ export default function StaffBoard() {
     let alive = true;
     const tick = async () => {
       try {
-        const [r1, r2] = await Promise.all([
+        const [r1, r2, r3] = await Promise.all([
           fetch("/api/staff").then((r) => r.json()),
           fetch("/api/dispatch").then((r) => r.json()),
+          // 報告はAI移動提案の根拠（ナウキャスト補正の入力）。提案パネルを配置タブへ移したので
+          // ここで取る（提案パネル自身はポーリングを持たない）
+          fetch("/api/report").then((r) => r.json()),
         ]);
         if (!alive) return;
         if (Array.isArray(r1.staff)) setStaffList(r1.staff);
         if (Array.isArray(r2.dispatches)) setDispatches(r2.dispatches);
+        if (Array.isArray(r3.reports)) setReports(r3.reports);
         setLoaded(true);
         sync.markOk();
       } catch {
@@ -187,6 +206,9 @@ export default function StaffBoard() {
 
   const selStaff = selName ? staffByName.get(selName) : undefined;
 
+  /** 選択中バーの「スタッフ画面」リンク用id。名簿外は encodeURIComponent フォールバック（2026-08-13 追加） */
+  const selStaffId = selName ? (rosterByName(selName)?.id ?? encodeURIComponent(selName)) : "";
+
   const selStaffIndex = useMemo(() => {
     if (!selName) return null;
     return board.entryStaff.findIndex((s) => s?.name === selName);
@@ -222,18 +244,34 @@ export default function StaffBoard() {
     [board.entryStaff]
   );
 
-  const handleZoneClick = useCallback(
-    (zoneId: string) => {
-      if (!selName) return;
+  /**
+   * 移動先を決めて確認モーダルを開く。**配信はしない**（配信は submitDispatch = /api/dispatch 一本）。
+   *
+   * タップ2回（メンバー選択 → ゾーンタップ）とドラッグ&ドロップの**共通の出口**。
+   * D&Dは新しい配信経路ではなく、ここへ至る操作をもう1つ増やしただけ、という位置づけにしてある
+   * （CLAUDE.md「配信の入口は承認UIだけ」）。postCode を渡せる点だけがタップ経路との差で、
+   * 空席ポストの丸に直接ドロップしたときはそのポストを事前選択する。
+   */
+  const openMoveModal = useCallback(
+    (name: string, zoneId: string, postCode?: string) => {
       const zonePosts = posts.filter((p) => p.zoneId === zoneId);
       const firstVacant = zonePosts.find((p) => !staffList.some((s) => isAssignedTo(s.postCode, p.code)));
+      setSelName(name);
       setMoveTargetZoneId(zoneId);
-      setSelectedPostCode(firstVacant?.code ?? "");
+      setSelectedPostCode(postCode ?? firstVacant?.code ?? "");
       setReason("");
       setUrgency("soon");
       setError("");
     },
-    [selName, posts, staffList]
+    [posts, staffList]
+  );
+
+  const handleZoneClick = useCallback(
+    (zoneId: string) => {
+      if (!selName) return;
+      openMoveModal(selName, zoneId);
+    },
+    [selName, openMoveModal]
   );
 
   const zonePosts = useMemo(
@@ -249,6 +287,97 @@ export default function StaffBoard() {
   }
 
   const modalOpen = Boolean(selName && moveTargetZoneId);
+
+  // ── ドラッグ&ドロップ（リスト行 → 会場図） ──
+  const drag = useDragToMap({
+    onDrop: (name, target) => openMoveModal(name, target.zoneId, target.postCode),
+    // モーダルが開いている間は掴ませない（背後のリストを操作させない）
+    disabled: modalOpen,
+  });
+
+  /**
+   * モバイル1カラム時、掴んだ瞬間に会場図が画面外だと落とす場所が無い。
+   * ドラッグ開始の1回だけスクロールで見えるようにする（ドラッグ中は動かさない）。
+   */
+  useEffect(() => {
+    if (!drag.draggingName) return;
+    mapRef.current?.scrollIntoView({ block: "nearest" });
+  }, [drag.draggingName]);
+
+  /** ドラッグ中は、乗っているゾーンの空席ポストにだけコードを出す（どこへ落ちるか分かるように） */
+  const dragLabelIndices = useMemo(() => {
+    if (!drag.overZoneId) return undefined;
+    const s = new Set<number>();
+    board.marks.forEach((m, i) => {
+      if (!board.dimmedIdx.has(i)) return;
+      if (posts.find((p) => p.code === m.label)?.zoneId === drag.overZoneId) s.add(i);
+    });
+    return s;
+  }, [drag.overZoneId, board, posts]);
+
+  /**
+   * AI移動提案のマップ表示は**hover/focus中の1件だけ**（橙のゴースト）。
+   * 全提案を薄く重ねると「どれが実際の指示でどれが案か」が読めなくなるため、意図的に1件に絞る。
+   */
+  const focusedGhost = useMemo<GhostMark | null>(() => {
+    if (focusedProposal === null) return null;
+    const p = proposals[focusedProposal];
+    if (!p) return null;
+    const zone = zoneById(p.toZoneId);
+    if (!zone) return null;
+    const idx = board.entryStaff.findIndex((s) => s?.name === p.staffName);
+    return {
+      from: idx >= 0 ? board.marks[idx].at : null,
+      to: centroid(zone.shape),
+      glyph: p.staffName.charAt(0),
+      kind: "proposal",
+    };
+  }, [focusedProposal, proposals, board]);
+
+  const ghostMarks = useMemo(
+    () => (focusedGhost ? [...board.ghosts, focusedGhost] : board.ghosts),
+    [board.ghosts, focusedGhost]
+  );
+
+  /** AIに渡す状況。初期配置案は開場前に使うので、時間帯と気温・規模が効く */
+  const situation = useMemo(() => {
+    const tt = timetableContext(hour);
+    const parts: string[] = [];
+    if (tt.nowMain) parts.push(`メイン: ${tt.nowMain}`);
+    if (tt.nowSub) parts.push(`サブ: ${tt.nowSub}`);
+    if (tt.next) parts.push(`次: ${tt.next.act}（${tt.next.stage}・${tt.next.from}時〜）`);
+    return {
+      hour: `${hour}:00`,
+      timetable: parts.length > 0 ? parts.join(" / ") : undefined,
+      weather: String(scenario.weather),
+      tempC: scenario.temp,
+      ticketCount: scenario.tickets,
+    };
+  }, [hour, scenario]);
+
+  /**
+   * 上部パネルの既定。未配置（未接続＋配置待ち）が名簿の過半なら「初期配置案」、
+   * そうでなければ「AI移動提案」＝ご指摘の「初期は配置案・途中は移動提案」。
+   * 一度手で切り替えたら panelTab がその選択を保持する。
+   */
+  const autoPanel: "initial" | "move" =
+    counts.unregistered + counts.waiting > ROSTER.length / 2 ? "initial" : "move";
+  const activePanel = panelTab ?? autoPanel;
+
+  const requestPoll = useCallback(() => {
+    // 配信直後は5秒待たずに盤面を追いつかせたいので、次のtickを待たずに1回取りに行く
+    Promise.all([
+      fetch("/api/staff").then((r) => r.json()),
+      fetch("/api/dispatch").then((r) => r.json()),
+    ])
+      .then(([r1, r2]) => {
+        if (Array.isArray(r1.staff)) setStaffList(r1.staff);
+        if (Array.isArray(r2.dispatches)) setDispatches(r2.dispatches);
+      })
+      .catch(() => {
+        /* 次のポーリングで追いつくので握りつぶしてよい */
+      });
+  }, []);
 
   /**
    * フォーカスの出入り（2026-08-13 追加）。開いた瞬間に最初の操作要素（移動先ポストのselect）へ移し、
@@ -376,6 +505,50 @@ export default function StaffBoard() {
       <div className="cw-board" style={{ display: "grid", gridTemplateColumns: "minmax(320px, 400px) 1fr", gap: 12 }}>
         {/* ── リスト ── */}
         <div className="cw-board-list" style={{ display: "grid", gap: 10, alignContent: "start" }}>
+          {/*
+            上部パネル（排他表示）。既定は autoPanel = 未配置が名簿の過半なら「初期配置案」、
+            そうでなければ「AI移動提案」＝「開場前は配置案・運用中は移動提案」を既定で出し分ける。
+            タブを押したらその選択を保持する。切り替え時に提案と焦点を捨てるのは、
+            アンマウントした側の古い提案でマップにゴーストが残るのを防ぐため。
+          */}
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "flex", gap: 6 }}>
+              <PanelTab
+                label="初期配置案"
+                active={activePanel === "initial"}
+                onClick={() => {
+                  setPanelTab("initial");
+                  setFocusedProposal(null);
+                  setProposals([]);
+                }}
+              />
+              <PanelTab
+                label="AI移動提案"
+                active={activePanel === "move"}
+                onClick={() => setPanelTab("move")}
+              />
+            </div>
+            {activePanel === "initial" ? (
+              <InitialPlanPanel
+                posts={posts}
+                staffList={staffList}
+                dispatches={dispatches}
+                situation={situation}
+                onDispatched={requestPoll}
+              />
+            ) : (
+              <ProposalPanel
+                hour={hour}
+                staffList={staffList}
+                reports={reports}
+                onApproved={requestPoll}
+                focusedIndex={focusedProposal}
+                onFocusChange={setFocusedProposal}
+                onProposalsChange={setProposals}
+              />
+            )}
+          </div>
+
           {/* sticky選択バー */}
           <div
             style={{
@@ -400,27 +573,54 @@ export default function StaffBoard() {
                 <span>
                   {selName}（{postCodeLabel(selStaff?.postCode ?? "")}）を選択中 — 移動先のゾーンをタップ。もう一度タップで解除
                 </span>
-                <button
-                  onClick={() => setSelName(null)}
-                  style={{
-                    marginLeft: "auto",
-                    minHeight: 44,
-                    minWidth: 44,
-                    padding: "0 12px",
-                    borderRadius: 8,
-                    border: "1px solid rgba(255,255,255,0.6)",
-                    background: "transparent",
-                    color: "#FFFFFF",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  解除
-                </button>
+                <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                  {/* 2026-08-13: 行の「開く」（MemberRow内リンク）を撤去し、ここに移設した。
+                      撮影台本 SESSION_HANDOFF.md:67 が「行の『開く』でスタッフ画面を新タブ表示」を要求しており、
+                      機能自体は消せない。id引き当ては rosterByName(selName)?.id、名簿外は
+                      encodeURIComponent(selName) にフォールバック（旧 MemberRow の offRoster 側と同じ規則）。
+                      /staff/[id] は未知idでも「不明なスタッフIDです」の案内画面を返す（rosterById未ヒット時のフォールバック
+                      表示・app/staff/[id]/page.tsx参照）ので、名簿外でもリンク自体は出す（壊れたリンクにはならない）。 */}
+                  <a
+                    href={`/staff/${selStaffId}`}
+                    target="_blank"
+                    rel="noopener"
+                    style={{
+                      minHeight: 44,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "0 12px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.6)",
+                      background: "transparent",
+                      color: "#FFFFFF",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      textDecoration: "none",
+                    }}
+                  >
+                    スタッフ画面
+                  </a>
+                  <button
+                    onClick={() => setSelName(null)}
+                    style={{
+                      minHeight: 44,
+                      minWidth: 44,
+                      padding: "0 12px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.6)",
+                      background: "transparent",
+                      color: "#FFFFFF",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    解除
+                  </button>
+                </span>
               </>
             ) : (
-              <span>メンバーを選ぶ → 移動先のゾーンをタップ</span>
+              <span>メンバーを選ぶ → 移動先のゾーンをタップ（行を会場図へドラッグしても同じ）</span>
             )}
           </div>
 
@@ -481,6 +681,8 @@ export default function StaffBoard() {
                     selected={selName === m.name}
                     onToggle={handleListSelect}
                     registerRef={registerRef}
+                    dragProps={drag.rowHandlers(m.name)}
+                    dragging={drag.draggingName === m.name}
                   />
                 ))}
               </div>
@@ -500,6 +702,8 @@ export default function StaffBoard() {
                     selected={selName === s.name}
                     onToggle={handleListSelect}
                     registerRef={registerRef}
+                    dragProps={drag.rowHandlers(s.name)}
+                    dragging={drag.draggingName === s.name}
                   />
                 ))}
               </div>
@@ -520,7 +724,10 @@ export default function StaffBoard() {
             onZoneClick={selName ? handleZoneClick : undefined}
             zoneBadges={board.zoneBadges}
             dimmedStaffIndices={board.dimmedIdx}
-            ghostMarks={board.ghosts}
+            ghostMarks={ghostMarks}
+            staffLabelMode="focus"
+            labelStaffIndices={dragLabelIndices}
+            highlightZoneId={drag.overZoneId}
           />
 
           {/* 凡例 */}
@@ -529,8 +736,9 @@ export default function StaffBoard() {
             <LegendDot color={ROLE_COLOR.guide} label="誘導" />
             <LegendDot color={ROLE_COLOR.aid} label="救護" />
             <LegendDot color={ROLE_COLOR.reception} label="受付" />
-            <span>薄い丸=空席</span>
-            <span>点線丸=指示中（グレー=未応答/青=移動中）</span>
+            <span>細枠=空席（未充足）</span>
+            <span>点線丸＋矢印=移動指示中（グレー=未応答／青=移動中）</span>
+            <span>橙=AI提案（未配信・カード選択中の1件）</span>
           </div>
 
           {unanswered.length > 0 && (
@@ -669,11 +877,58 @@ export default function StaffBoard() {
           </div>
         </div>
       )}
+      {/*
+        ドラッグ中の追従チップ。位置は use-drag-to-map が chipRef の transform へ直接書き込む
+        （pointermove ごとに state を更新すると23行のリストとSVG会場図が毎フレーム再レンダーされるため）。
+        pointerEvents:none が必須 — これが無いと elementFromPoint がチップ自身を拾い、
+        ドロップ先のゾーンが永久に見つからなくなる。
+      */}
+      {drag.draggingName && (
+        <div
+          ref={drag.chipRef}
+          aria-hidden
+          style={{
+            position: "fixed",
+            left: 0,
+            top: 0,
+            pointerEvents: "none",
+            zIndex: 2000,
+            transform: "translate3d(-9999px, -9999px, 0)",
+            willChange: "transform",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              transform: "translate(10px, 10px)",
+              padding: "6px 12px",
+              borderRadius: 999,
+              background: DAY.text,
+              color: "#FFFFFF",
+              fontSize: 13,
+              fontWeight: 700,
+              boxShadow: "0 6px 20px rgba(11,17,31,0.35)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {drag.draggingName}
+            <span style={{ opacity: 0.8, fontWeight: 400 }}>を移動先へ</span>
+          </span>
+        </div>
+      )}
     </div>
   );
 }
 
-/** 名簿1行分。ROSTER・名簿外いずれも同じ形で描く */
+/**
+ * 名簿1行分。ROSTER・名簿外いずれも同じ形で描く。
+ *
+ * 2026-08-13 改訂: 3段組（名前+役割 / バッジ行 / ポストコード行）→ 1段の横並びに圧縮。
+ * 23人分でリストが長すぎるという指摘への対応。「開く」リンクは選択中バー（sticky）へ移設した
+ * （情報は落とさない・撮影台本 SESSION_HANDOFF.md:67 が要求する2画面表示は維持する）。
+ */
 function MemberRow({
   info,
   staff,
@@ -681,6 +936,8 @@ function MemberRow({
   selected,
   onToggle,
   registerRef,
+  dragProps,
+  dragging,
 }: {
   info: RowInfo;
   staff: Staff | undefined;
@@ -688,6 +945,10 @@ function MemberRow({
   selected: boolean;
   onToggle: (name: string) => void;
   registerRef: (name: string, el: HTMLDivElement | null) => void;
+  /** use-drag-to-map の rowHandlers(name)。onClickCapture がドラッグ直後のタップ選択を1回だけ潰す */
+  dragProps?: ReturnType<ReturnType<typeof useDragToMap>["rowHandlers"]>;
+  /** この行を掴んでいる最中か（掴んだ手応えを出す） */
+  dragging?: boolean;
 }) {
   const badge = memberBadge(staff, dispatch, Date.now());
   const style = STATUS_STYLE[badge.status];
@@ -705,16 +966,21 @@ function MemberRow({
           onToggle(info.name);
         }
       }}
+      onPointerDown={dragProps?.onPointerDown}
+      onContextMenu={dragProps?.onContextMenu}
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 10,
-        minHeight: 48,
+        gap: 8,
+        minHeight: 44,
         padding: "6px 10px",
         borderRadius: 10,
         border: selected ? `2px solid ${DAY.text}` : `1px solid ${DAY.line}`,
         background: DAY.surface,
         cursor: "pointer",
+        // 掴んでいる行は薄くして「持ち上がっている」ことを示す（実体は追従チップ側）
+        opacity: dragging ? 0.4 : 1,
+        ...dragProps?.style,
       }}
     >
       <span
@@ -736,64 +1002,78 @@ function MemberRow({
         {info.name.charAt(0)}
       </span>
 
-      <span style={{ display: "grid", gap: 2, flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 15, fontWeight: 700 }}>
-          {info.name} <span style={{ fontSize: 13, fontWeight: 400, color: DAY.textFaint }}>{ROLE_LABEL[info.role]}</span>
-        </span>
-        <span style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-          <span
-            style={{
-              display: "inline-block",
-              padding: "1px 8px",
-              borderRadius: 999,
-              border: `1px solid ${style.border}`,
-              background: style.bg,
-              color: style.text,
-              fontSize: 13,
-              fontWeight: 700,
-            }}
-          >
-            {style.label}
-          </span>
-          {badge.stale && <Chip label="古い" color={DAY.danger} bg="#FCE8ED" />}
-          {badge.unanswered && <Chip label="未応答" color="#B45309" bg="#FFF3E4" />}
-        </span>
-        <span style={{ fontSize: 13, color: DAY.textFaint }}>
-          {postCodeLabel(staff?.postCode ?? "")}
-          {active && (
-            <>
-              {" → "}
-              {active.toZoneName}
-              {active.toPostCode ? `(${active.toPostCode})` : ""}
-              （{active.status === "moving" ? "移動中" : "未応答"}）
-            </>
-          )}
-        </span>
+      <span style={{ fontSize: 15, fontWeight: 700, whiteSpace: "nowrap" }}>
+        {info.name} <span style={{ fontSize: 13, fontWeight: 400, color: DAY.textFaint }}>{ROLE_LABEL[info.role]}</span>
       </span>
 
-      <a
-        href={`/staff/${info.id}`}
-        target="_blank"
-        rel="noopener"
-        onClick={(e) => e.stopPropagation()}
+      <span
         style={{
-          minWidth: 44,
-          minHeight: 44,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          flex: 1,
+          minWidth: 0,
           fontSize: 13,
-          fontWeight: 700,
-          color: DAY.textDim,
-          textDecoration: "none",
-          border: `1px solid ${DAY.line}`,
-          borderRadius: 8,
-          padding: "0 10px",
+          color: DAY.textFaint,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
         }}
       >
-        開く
-      </a>
+        {postCodeLabel(staff?.postCode ?? "")}
+        {active && (
+          <>
+            {" → "}
+            {active.toZoneName}
+            {active.toPostCode ? `(${active.toPostCode})` : ""}
+            （{active.status === "moving" ? "移動中" : "未応答"}）
+          </>
+        )}
+      </span>
+
+      <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+        <span
+          style={{
+            display: "inline-block",
+            minWidth: 56,
+            textAlign: "center",
+            padding: "1px 8px",
+            borderRadius: 999,
+            border: `1px solid ${style.border}`,
+            background: style.bg,
+            color: style.text,
+            fontSize: 13,
+            fontWeight: 700,
+          }}
+        >
+          {style.label}
+        </span>
+        {/* stale/unanswered は Chip（文字幅）だと行を圧迫するため、丸ドットに圧縮。
+            色は従来のChipと同じ・title/aria-labelで情報を落とさず読めるようにする */}
+        {badge.stale && <StatusDot color={DAY.danger} label="古い" />}
+        {badge.unanswered && <StatusDot color="#B45309" label="未応答" />}
+      </span>
     </div>
+  );
+}
+
+/** 上部パネルの切替タブ（初期配置案 / AI移動提案） */
+function PanelTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      style={{
+        minHeight: 44,
+        padding: "0 14px",
+        borderRadius: 9,
+        border: active ? `2px solid ${DAY.text}` : `1px solid ${DAY.line}`,
+        background: active ? DAY.text : DAY.surface,
+        color: active ? "#FFFFFF" : DAY.textDim,
+        fontSize: 13,
+        fontWeight: 700,
+        cursor: "pointer",
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -817,11 +1097,26 @@ function Pill({ label, n, color, bg }: { label: string; n: number; color: string
   );
 }
 
-function Chip({ label, color, bg }: { label: string; color: string; bg: string }) {
+/**
+ * stale/unanswered の6px丸ドット（2026-08-13 追加）。MemberRowの1段圧縮で
+ * Chip（文字幅）が入らなくなったため。色情報は残すが文字は落とすので、
+ * title（マウスhover）とaria-label（スクリーンリーダー）の両方で読めるようにする。
+ */
+function StatusDot({ color, label }: { color: string; label: string }) {
   return (
-    <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 999, background: bg, color, fontSize: 13, fontWeight: 700 }}>
-      {label}
-    </span>
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      style={{
+        display: "inline-block",
+        width: 6,
+        height: 6,
+        minWidth: 6,
+        borderRadius: "50%",
+        background: color,
+      }}
+    />
   );
 }
 
