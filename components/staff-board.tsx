@@ -55,6 +55,24 @@ const STATUS_STYLE: Record<MemberStatus, { bg: string; border: string; text: str
 /** グループの表示順（ROSTER の並びは頭文字ユニークだが、グループ順は明示する） */
 const GROUP_ORDER: RosterGroup[] = ["メイン", "フード", "サブ", "給水", "救護", "受付"];
 
+/** 空状態ガイドで示す専用URLの範囲（名簿の先頭と末尾。ROSTER が増減しても文言が嘘にならないよう導出する） */
+const ROSTER_FIRST = ROSTER[0];
+const ROSTER_LAST = ROSTER[ROSTER.length - 1];
+
+/** モーダル内でフォーカスを受け取れる要素（Tab循環の対象） */
+const FOCUSABLE_SELECTOR = 'a[href], button, select, input, textarea, [tabindex]:not([tabindex="-1"])';
+
+/**
+ * モーダル内のフォーカス可能要素。disabled は除く。
+ * 配信中は下段2ボタンが disabled になるため、Tabのたびに取り直すこと（固定配列にしない）。
+ */
+function focusablesIn(root: HTMLElement | null): HTMLElement[] {
+  if (!root) return [];
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (el) => !el.hasAttribute("disabled")
+  );
+}
+
 /** ROSTER をグループ順に束ねる。ROSTER は静的なので一度だけ計算する */
 const ROSTER_BY_GROUP: [RosterGroup, RosterMember[]][] = (() => {
   const map = new Map<RosterGroup, RosterMember[]>();
@@ -88,9 +106,12 @@ export default function StaffBoard() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  /** 初回の取得が成功したか。未取得のうちは「誰も接続していません」と言い切らない（嘘の空状態を出さない） */
+  const [loaded, setLoaded] = useState(false);
 
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const mapRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const plan = useMemo(() => dayPlan(scenario), [scenario]);
   const posts = useMemo(() => postsFor(plan), [plan]);
@@ -108,6 +129,7 @@ export default function StaffBoard() {
         if (!alive) return;
         if (Array.isArray(r1.staff)) setStaffList(r1.staff);
         if (Array.isArray(r2.dispatches)) setDispatches(r2.dispatches);
+        setLoaded(true);
         sync.markOk();
       } catch {
         if (alive) sync.markFail();
@@ -156,6 +178,12 @@ export default function StaffBoard() {
     () => dispatches.filter((d) => d.status === "sent" && Date.now() - d.createdAt > 10 * 60_000),
     [dispatches]
   );
+
+  /**
+   * 初回訪問のガイドを出す条件: 取得済み かつ 名簿全員が未接続 かつ 名簿外の入場者もいない。
+   * 1人でも接続していれば出さない（毎回出ると邪魔になる）。
+   */
+  const showEmptyGuide = loaded && offRoster.length === 0 && counts.unregistered === ROSTER.length;
 
   const selStaff = selName ? staffByName.get(selName) : undefined;
 
@@ -220,16 +248,49 @@ export default function StaffBoard() {
     setError("");
   }
 
-  // Escキーでモーダルを閉じる（キーボードのみの操作を塞がないため。2026-08-13 追加）
+  const modalOpen = Boolean(selName && moveTargetZoneId);
+
+  /**
+   * フォーカスの出入り（2026-08-13 追加）。開いた瞬間に最初の操作要素（移動先ポストのselect）へ移し、
+   * 閉じたら開く前の要素へ戻す。依存は modalOpen だけにする — busy を入れると
+   * 配信中に cleanup→再実行が走ってフォーカスが飛ぶ。
+   */
   useEffect(() => {
-    if (!moveTargetZoneId) return;
+    if (!modalOpen) return;
+    // 退避は focus() を移す前に取ること（順序が逆だとモーダル内の要素を「元の場所」として覚えてしまう）。
+    // 地図のゾーンはSVG要素なので HTMLElement だけでは拾えない
+    const prev = document.activeElement;
+    focusablesIn(modalRef.current)[0]?.focus();
+    return () => {
+      if (prev instanceof HTMLElement || prev instanceof SVGElement) prev.focus();
+    };
+  }, [modalOpen]);
+
+  // Escキーで閉じる／Tabをモーダル内で循環させる（キーボードのみの操作を塞がないため。2026-08-13 追加）
+  useEffect(() => {
+    if (!modalOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") cancelMove();
+      if (e.key === "Escape") {
+        cancelMove();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = focusablesIn(modalRef.current);
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      const inside = modalRef.current?.contains(active) ?? false;
+      const atEdge = e.shiftKey ? active === first : active === last;
+      if (atEdge || !inside) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moveTargetZoneId, busy]);
+  }, [modalOpen, busy]);
 
   async function submitDispatch() {
     if (!selName || !moveTargetZoneId || busy) return;
@@ -363,6 +424,50 @@ export default function StaffBoard() {
             )}
           </div>
 
+          {showEmptyGuide && (
+            <div
+              style={{
+                background: DAY.surface,
+                border: `1px solid ${DAY.line}`,
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontSize: 15, fontWeight: 700 }}>まだ誰も接続していません</div>
+              <div style={{ fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
+                各スタッフに専用URLを配ると、接続状態がここに出ます。URLは{" "}
+                <span className="cw-mono">/staff/{ROSTER_FIRST.id}</span>（{ROSTER_FIRST.name}）〜{" "}
+                <span className="cw-mono">/staff/{ROSTER_LAST.id}</span>（{ROSTER_LAST.name}）の{ROSTER.length}通りです。
+              </div>
+              <a
+                href={`/staff/${ROSTER_FIRST.id}`}
+                target="_blank"
+                rel="noopener"
+                style={{
+                  justifySelf: "start",
+                  minHeight: 44,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "0 14px",
+                  borderRadius: 9,
+                  border: `1px solid ${DAY.line}`,
+                  background: DAY.page,
+                  color: DAY.text,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                /staff/{ROSTER_FIRST.id}（{ROSTER_FIRST.name}）を開いてみる
+              </a>
+              <div style={{ fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
+                接続していないメンバーにも、先に配置指示を出せます（名簿の行を選んでください）。
+              </div>
+            </div>
+          )}
+
           {ROSTER_BY_GROUP.map(([group, members]) => (
             <div key={group}>
               <div style={{ fontSize: 15, fontWeight: 700, margin: "4px 0" }}>{group}</div>
@@ -441,8 +546,9 @@ export default function StaffBoard() {
       </div>
 
       {/* 指示の最終確認モーダル（配信の唯一の入口 = /api/dispatch） */}
-      {selName && moveTargetZoneId && (
+      {modalOpen && (
         <div
+          ref={modalRef}
           role="dialog"
           aria-modal="true"
           aria-label="配置指示の最終確認"

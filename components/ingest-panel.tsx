@@ -180,6 +180,27 @@ export default function IngestPanel() {
   const zones = result?.venue.zones ?? [];
   const buildings = result?.venue.buildings ?? [];
 
+  /** まだ何も読み込んでいない初期状態。この間だけ「サンプル会場で試す」を推奨導線にする */
+  const initial = !result;
+
+  /**
+   * 入口ボタンの強弱（2026-08-13 追加）。
+   * 初回訪問者は手元に会場図を持っていないので、初期状態ではサンプルを主役にする。
+   * 一度結果が出た後は「自分の画像を投げる」が主役に戻る。
+   * 機能・文言は変えず色の強弱だけ入れ替える。busy中の見え方（塗り→枠線）も主役側に付いて回る。
+   */
+  const entryBtn = (primary: boolean): React.CSSProperties => ({
+    minHeight: 44,
+    padding: "10px 18px",
+    borderRadius: 999,
+    border: `1px solid ${primary ? INK.accent : INK.line}`,
+    background: primary && !busy ? INK.accent : "transparent",
+    color: primary ? (busy ? INK.accent : INK.page) : INK.textDim,
+    fontWeight: primary ? 700 : 600,
+    fontSize: 13,
+    cursor: busy ? "wait" : "pointer",
+  });
+
   return (
     <div style={{ display: "grid", gap: 14 }}>
       {/* ── 説明と入口 ─────────────────────────────── */}
@@ -227,41 +248,18 @@ export default function IngestPanel() {
             ここに画像をドロップ（PNG / JPEG / WebP）
           </div>
           <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={busy}
-              style={{
-                minHeight: 44,
-                padding: "10px 18px",
-                borderRadius: 999,
-                border: `1px solid ${INK.accent}`,
-                background: busy ? "transparent" : INK.accent,
-                color: busy ? INK.accent : INK.page,
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: busy ? "wait" : "pointer",
-              }}
-            >
+            <button onClick={() => fileRef.current?.click()} disabled={busy} style={entryBtn(!initial)}>
               ファイルを選ぶ
             </button>
-            <button
-              onClick={runSample}
-              disabled={busy}
-              style={{
-                minHeight: 44,
-                padding: "10px 18px",
-                borderRadius: 999,
-                border: `1px solid ${INK.line}`,
-                background: "transparent",
-                color: INK.textDim,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: busy ? "wait" : "pointer",
-              }}
-            >
+            <button onClick={runSample} disabled={busy} style={entryBtn(initial)}>
               サンプル会場で試す
             </button>
           </div>
+          {initial && (
+            <div style={{ marginTop: 10, fontSize: 13, color: INK.textDim, lineHeight: 1.7 }}>
+              手元に会場図が無ければ、<b style={{ color: INK.text }}>サンプル会場で試す</b>で動きを確認できます。
+            </div>
+          )}
           <div style={{ marginTop: 10, fontSize: 13, color: INK.textFaint }}>
             ブラウザ内で長辺{RESIZE_LONG_EDGE}pxへ縮小した縮小版のみサーバーへ送信（元解像度の画像は送らない）
           </div>

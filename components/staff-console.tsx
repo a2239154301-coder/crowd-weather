@@ -325,7 +325,17 @@ export default function StaffConsole({ fixedMember }: { fixedMember?: RosterMemb
           <span style={{ fontSize: 13, color: DAY.textFaint }}>受信箱（5秒ごとに更新）</span>
           <SyncBadge sync={sync} tone="day" />
         </div>
-        {active.length === 0 && <div style={{ fontSize: 15, color: DAY.textDim }}>新しい指示はありません</div>}
+        {/* 空のときは「次に何をすればいいか」まで書く（1行だけだと初見で手が止まる。2026-08-13 追加） */}
+        {active.length === 0 && (
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontSize: 15, color: DAY.text }}>新しい指示はありません</div>
+            <div style={{ fontSize: 15, color: DAY.textDim, lineHeight: 1.7 }}>
+              {awaitingPlacement
+                ? "本部が配置を決めるとここに届きます。この画面を開いたままにしてください。"
+                : "いまは指示待ちです。現地の混雑・暑さは下のボタンで報告できます。"}
+            </div>
+          </div>
+        )}
         {active.map((d) => (
           <div
             key={d.id}
