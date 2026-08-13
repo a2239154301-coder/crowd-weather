@@ -91,6 +91,20 @@ type Props = {
    */
   nowHour?: number | null;
   peakHour?: number | null;
+  /**
+   * タップ2回で移動指示（調整コンソール配置ボード 2026-08-13 追加）。
+   * すべてoptional・未指定時は従来描画と完全一致する。
+   */
+  /** スタッフ丸のタップ。指定時のみ丸が cursor:pointer になる */
+  onStaffClick?: (index: number) => void;
+  /** 選択中マーカー（白リング r+4 で強調） */
+  selectedStaffIndex?: number | null;
+  /** ゾーンのタップ（移動先選択）。指定時のみゾーンパスが cursor:pointer */
+  onZoneClick?: (zoneId: string) => void;
+  /** ゾーン別人数バッジ {zoneId: 人数}。ゾーンラベルの上に「N人」ピルを描く */
+  zoneBadges?: Record<string, number>;
+  /** マーカーの薄表示index集合（空席ポスト用・クリック不可・opacity 0.35） */
+  dimmedStaffIndices?: ReadonlySet<number>;
 };
 
 export default function VenueMap({
@@ -103,6 +117,11 @@ export default function VenueMap({
   compact = false,
   nowHour = null,
   peakHour = null,
+  onStaffClick,
+  selectedStaffIndex = null,
+  onZoneClick,
+  zoneBadges,
+  dimmedStaffIndices,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
 
@@ -221,12 +240,16 @@ export default function VenueMap({
           const c = LABEL_NUDGE[f.zone.id] ?? f.zone.label ?? centroid(f.zone.shape);
           const isHover = hovered === f.zone.id;
           const thin = bboxHeight(f.zone.shape) < THIN_ZONE;
+          const zoneClickable = Boolean(onZoneClick);
           return (
             <g
               key={f.zone.id}
               onMouseEnter={() => setHovered(f.zone.id)}
               onMouseLeave={() => setHovered(null)}
-              style={{ cursor: "default" }}
+              onClick={zoneClickable ? () => onZoneClick!(f.zone.id) : undefined}
+              role={zoneClickable ? "button" : undefined}
+              aria-label={zoneClickable ? `${f.zone.name}へ移動先指定` : undefined}
+              style={{ cursor: zoneClickable ? "pointer" : "default" }}
             >
               {critical && !dimmed && (
                 <path d={toPath(f.zone.shape)} fill={band.color} opacity={0.34} filter="url(#cw-soft)" />
@@ -321,22 +344,96 @@ export default function VenueMap({
           );
         })}
 
+        {/* 4.5 ゾーン別人数バッジ（調整コンソール配置ボード 2026-08-13 追加） */}
+        {zoneBadges &&
+          Object.entries(zoneBadges).map(([zoneId, n]) => {
+            if (!n) return null;
+            const z = zones.find((zz) => zz.id === zoneId);
+            if (!z) return null;
+            const c = LABEL_NUDGE[zoneId] ?? z.label ?? centroid(z.shape);
+            const label = `${n}人`;
+            const w = Math.max(30, 16 + label.length * 8);
+            const h = 18;
+            const by = c.y - 22;
+            return (
+              <g key={zoneId} style={{ pointerEvents: "none" }}>
+                <rect
+                  x={c.x - w / 2}
+                  y={by - h / 2}
+                  width={w}
+                  height={h}
+                  rx={8}
+                  fill={INK.raised}
+                  stroke={INK.line}
+                  strokeWidth={1}
+                />
+                <text
+                  x={c.x}
+                  y={by + 4}
+                  textAnchor="middle"
+                  fontSize={11}
+                  fill={INK.text}
+                  className="cw-mono"
+                >
+                  {label}
+                </text>
+              </g>
+            );
+          })}
+
         {/* 5. スタッフ配置 */}
-        {staff?.map((m, i) => (
-          <g key={i}>
-            <circle cx={m.at.x} cy={m.at.y} r={13} fill={ROLE_COLOR[m.role]} stroke="#0A0E17" strokeWidth={2.5} />
-            <text
-              x={m.at.x}
-              y={m.at.y + 5}
-              textAnchor="middle"
-              fontSize={13}
-              fontWeight={700}
-              fill="#0A0E17"
+        {staff?.map((m, i) => {
+          const dimmed = dimmedStaffIndices?.has(i) ?? false;
+          const selected = selectedStaffIndex === i;
+          const clickable = !dimmed && Boolean(onStaffClick);
+          return (
+            <g
+              key={i}
+              opacity={dimmed ? 0.35 : 1}
+              onClick={
+                clickable
+                  ? (e) => {
+                      e.stopPropagation();
+                      onStaffClick!(i);
+                    }
+                  : undefined
+              }
+              style={{ cursor: clickable ? "pointer" : "default" }}
             >
-              {ROLE_GLYPH[m.role]}
-            </text>
-          </g>
-        ))}
+              {selected && (
+                <circle cx={m.at.x} cy={m.at.y} r={17} fill="none" stroke="#FFFFFF" strokeWidth={3} />
+              )}
+              <circle cx={m.at.x} cy={m.at.y} r={13} fill={ROLE_COLOR[m.role]} stroke="#0A0E17" strokeWidth={2.5} />
+              <text
+                x={m.at.x}
+                y={m.at.y + 5}
+                textAnchor="middle"
+                fontSize={13}
+                fontWeight={700}
+                fill="#0A0E17"
+                style={{ pointerEvents: "none" }}
+              >
+                {ROLE_GLYPH[m.role]}
+              </text>
+              {!compact && (
+                <text
+                  x={m.at.x}
+                  y={m.at.y + 18}
+                  textAnchor="middle"
+                  fontSize={11}
+                  fontWeight={600}
+                  fill={INK.text}
+                  stroke={INK.page}
+                  strokeWidth={3}
+                  paintOrder="stroke"
+                  style={{ pointerEvents: "none" }}
+                >
+                  {m.label}
+                </text>
+              )}
+            </g>
+          );
+        })}
 
         {/* 6. 会場図としての作法：方位・太陽・縮尺 */}
         <SunCompass sun={sun} night={night} hour={hour} compact={compact} />
