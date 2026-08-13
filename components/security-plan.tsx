@@ -204,6 +204,7 @@ ${tableHtml(rows)}
             onClick={draftSummary}
             disabled={summaryBusy}
             style={{
+              minHeight: 44,
               padding: "8px 15px",
               borderRadius: 999,
               border: `1px solid ${INK.accent}`,
@@ -219,6 +220,7 @@ ${tableHtml(rows)}
           <button
             onClick={printPlan}
             style={{
+              minHeight: 44,
               padding: "8px 15px",
               borderRadius: 999,
               border: "none",

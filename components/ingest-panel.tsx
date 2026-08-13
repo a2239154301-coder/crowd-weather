@@ -231,6 +231,7 @@ export default function IngestPanel() {
               onClick={() => fileRef.current?.click()}
               disabled={busy}
               style={{
+                minHeight: 44,
                 padding: "10px 18px",
                 borderRadius: 999,
                 border: `1px solid ${INK.accent}`,
@@ -247,6 +248,7 @@ export default function IngestPanel() {
               onClick={runSample}
               disabled={busy}
               style={{
+                minHeight: 44,
                 padding: "10px 18px",
                 borderRadius: 999,
                 border: `1px solid ${INK.line}`,

@@ -291,7 +291,7 @@ export default function CrowdWeather() {
             <div style={{display:"flex",gap:4,background:C.panel,border:`1px solid ${C.line}`,borderRadius:12,padding:4}}>
               {[["ops","主催者コンソール",<Sliders key="a" size={13}/>],["app","来場者アプリ",<Smartphone key="b" size={13}/>],["data","データ設計",<Database key="c" size={13}/>]].map(([k,l,ic])=>(
                 <button key={k} onClick={()=>setView(k)}
-                  style={{display:"flex",alignItems:"center",gap:6,padding:"8px 13px",borderRadius:9,cursor:"pointer",
+                  style={{display:"flex",alignItems:"center",gap:6,minHeight:44,padding:"8px 13px",borderRadius:9,cursor:"pointer",
                     fontWeight:600,fontSize:13,border:"none",
                     background:view===k?C.cool:"transparent",color:view===k?C.ink:C.muted}}>{ic}{l}</button>
               ))}
@@ -323,7 +323,7 @@ export default function CrowdWeather() {
                 const st=hourStats(zones,h,s),ds=densStyle(st.maxD),hs=heatStyle(st.maxW),active=h===hour;
                 return (
                   <button key={h} onClick={()=>setHour(h)}
-                    style={{flex:"0 0 auto",width:78,background:active?C.panel2:"transparent",
+                    style={{flex:"0 0 auto",width:78,minHeight:44,background:active?C.panel2:"transparent",
                       border:`1px solid ${active?C.cool:C.line}`,borderRadius:12,padding:"10px 6px",
                       cursor:"pointer",color:C.mist,textAlign:"center",transition:"all .15s"}}>
                     <div style={{fontFamily:mono,fontSize:13,color:active?C.cool:C.muted}}>{h}:00</div>
@@ -357,7 +357,7 @@ export default function CrowdWeather() {
                   {[["sunny","晴"],["cloudy","曇"],["rainy","雨"]].map(([k,l])=>(
                     <button key={k} onClick={()=>set("weather",k)}
                       style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
-                        padding:"9px 0",borderRadius:10,cursor:"pointer",fontWeight:600,fontSize:13,
+                        minHeight:44,padding:"9px 0",borderRadius:10,cursor:"pointer",fontWeight:600,fontSize:13,
                         background:s.weather===k?C.cool:C.panel2,color:s.weather===k?C.ink:C.muted,
                         border:`1px solid ${s.weather===k?C.cool:C.line}`}}>
                       <WeatherIcon w={k} color={s.weather===k?C.ink:C.muted} size={16}/>{l}</button>
@@ -419,7 +419,7 @@ export default function CrowdWeather() {
 
               <button onClick={()=>setShowPlan(v=>!v)}
                 style={{marginTop:14,width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-                  padding:"12px 0",borderRadius:11,cursor:"pointer",fontWeight:700,fontSize:15,
+                  minHeight:44,padding:"12px 0",borderRadius:11,cursor:"pointer",fontWeight:700,fontSize:15,
                   background:C.cool,color:C.ink,border:"none"}}>
                 <FileText size={17}/>{showPlan?"計画書を閉じる":"雑踏警備計画書＋配置図をワンクリック出力"}
               </button>
@@ -440,7 +440,7 @@ export default function CrowdWeather() {
                   </div>
                 </div>
                 <button onClick={askOrca} disabled={aiLoading}
-                  style={{display:"flex",alignItems:"center",gap:7,padding:"10px 14px",borderRadius:10,
+                  style={{display:"flex",alignItems:"center",gap:7,minHeight:44,padding:"10px 14px",borderRadius:10,
                     cursor:aiLoading?"wait":"pointer",fontWeight:700,fontSize:13,border:"none",
                     background:C.violet,color:C.ink,opacity:aiLoading?0.65:1}}>
                   <Sparkles size={15}/>{aiLoading?"分析中…":"AIに運営判断を聞く"}
@@ -486,14 +486,14 @@ export default function CrowdWeather() {
                   <div style={{display:"flex",gap:4,background:C.panel2,border:`1px solid ${C.line}`,borderRadius:10,padding:3}}>
                     {[["in","会場内"],["out","会場外"]].map(([k,l])=>(
                       <button key={k} onClick={()=>setScope(k)}
-                        style={{padding:"6px 11px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,
+                        style={{minHeight:44,padding:"6px 11px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,
                           background:scope===k?C.violet:"transparent",color:scope===k?C.ink:C.muted,border:"none"}}>{l}</button>
                     ))}
                   </div>
                   <div style={{display:"flex",gap:4,background:C.panel2,border:`1px solid ${C.line}`,borderRadius:10,padding:3}}>
                     {[["crowd","混雑"],["heat","暑熱/日陰"]].map(([k,l])=>(
                       <button key={k} onClick={()=>setLayer(k)}
-                        style={{padding:"6px 11px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,
+                        style={{minHeight:44,padding:"6px 11px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,
                           background:layer===k?C.cool:"transparent",color:layer===k?C.ink:C.muted,border:"none"}}>{l}</button>
                     ))}
                   </div>

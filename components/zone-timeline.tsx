@@ -24,6 +24,8 @@ type Props = {
   onHourChange: (h: number) => void;
 };
 
+// タップ目標44pxルールの例外: このセルは密度一覧の分析グリッド（計画モード・デスクトップ）で、
+// 44化すると18行で+324px伸びて一覧性が失われる。時刻選択の主経路はHourlyStrip（44px対応済み）。
 const CELL_H = 26;
 
 export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Props) {

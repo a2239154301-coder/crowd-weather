@@ -378,6 +378,7 @@ export default function OpsConsole() {
                   onClick={applyPlace}
                   disabled={placeBusy || !placeQuery.trim()}
                   style={{
+                    minHeight: 44,
                     padding: "8px 13px",
                     borderRadius: 8,
                     border: `1px solid ${INK.line}`,
@@ -406,6 +407,7 @@ export default function OpsConsole() {
               style={{
                 width: "100%",
                 marginBottom: 13,
+                minHeight: 44,
                 padding: "10px 0",
                 borderRadius: 9,
                 border: `1px solid ${INK.accent}`,
@@ -450,6 +452,7 @@ export default function OpsConsole() {
                     aria-pressed={scenario.weather === w}
                     style={{
                       flex: 1,
+                      minHeight: 44,
                       padding: "8px 0",
                       borderRadius: 9,
                       fontSize: 13,
@@ -731,6 +734,7 @@ export default function OpsConsole() {
                     onClick={() => askOrca("directive")}
                     disabled={aiBusy}
                     style={{
+                      minHeight: 44,
                       padding: "12px 22px",
                       borderRadius: 999,
                       border: "none",
@@ -748,6 +752,7 @@ export default function OpsConsole() {
                     onClick={() => askOrca("advice")}
                     disabled={aiBusy}
                     style={{
+                      minHeight: 44,
                       padding: "12px 18px",
                       borderRadius: 999,
                       border: `1px solid ${INK.line}`,
@@ -862,6 +867,7 @@ export default function OpsConsole() {
                 onClick={askBriefings}
                 disabled={briefBusy}
                 style={{
+                  minHeight: 44,
                   padding: "9px 16px",
                   borderRadius: 999,
                   border: `1px solid ${INK.line}`,
@@ -957,6 +963,7 @@ export default function OpsConsole() {
                 onClick={askWhatif}
                 disabled={whatifBusy || !whatifQ.trim()}
                 style={{
+                  minHeight: 44,
                   padding: "10px 18px",
                   borderRadius: 9,
                   border: "none",
@@ -1031,6 +1038,7 @@ export default function OpsConsole() {
                     }}
                     style={{
                       marginTop: 10,
+                      minHeight: 44,
                       padding: "8px 15px",
                       borderRadius: 999,
                       border: `1px solid ${INK.line}`,
@@ -1182,6 +1190,7 @@ function Toggle({
           onClick={() => onChange(k)}
           aria-pressed={value === k}
           style={{
+            minHeight: 44,
             padding: "6px 13px",
             borderRadius: 7,
             border: "none",

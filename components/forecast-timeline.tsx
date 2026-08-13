@@ -72,6 +72,7 @@ export default function ForecastTimeline({ zones, scenario, hour, onHourChange }
             display: "flex",
             alignItems: "center",
             gap: 9,
+            minHeight: 44,
             padding: "9px 17px 9px 14px",
             borderRadius: 999,
             border: `1px solid ${playing ? INK.accent : INK.line}`,
@@ -174,6 +175,7 @@ function BarRow({
             style={{
               flex: 1,
               height: "100%",
+              minHeight: 44,
               display: "flex",
               alignItems: "flex-end",
               justifyContent: "center",

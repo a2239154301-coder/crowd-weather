@@ -92,6 +92,7 @@ export default function HourlyStrip({ zones, scenario, hour, onHourChange, scope
               display: "flex",
               alignItems: "center",
               gap: 8,
+              minHeight: 44,
               padding: "9px 17px 9px 14px",
               borderRadius: 999,
               border: `1px solid ${playing ? INK.accent : INK.line}`,
@@ -125,6 +126,7 @@ export default function HourlyStrip({ zones, scenario, hour, onHourChange, scope
               style={{
                 flex: "0 0 auto",
                 width: 78,
+                minHeight: 44,
                 background: active ? INK.raised : "transparent",
                 border: `1px solid ${active ? INK.accent : INK.line}`,
                 borderRadius: 12,

@@ -138,6 +138,7 @@ export default function AppShell() {
                   flexDirection: "column",
                   alignItems: "flex-start",
                   gap: 1,
+                  minHeight: 44,
                   padding: "8px 16px",
                   borderRadius: 9,
                   border: "none",
@@ -183,6 +184,7 @@ export default function AppShell() {
                     onClick={() => setView(k)}
                     aria-current={view === k ? "page" : undefined}
                     style={{
+                      minHeight: 44,
                       padding: "8px 15px",
                       borderRadius: 8,
                       border: "none",
@@ -223,6 +225,7 @@ export default function AppShell() {
                         display: "flex",
                         alignItems: "baseline",
                         gap: 5,
+                        minHeight: 44,
                         background: "transparent",
                         border: "none",
                         cursor: "pointer",
