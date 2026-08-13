@@ -37,7 +37,7 @@ export default function CompareBar() {
         marginBottom: 14,
       }}
     >
-      <span style={{ fontSize: 11, color: INK.textFaint, paddingRight: 4, letterSpacing: 1 }}>版</span>
+      <span style={{ fontSize: 13, color: INK.textFaint, paddingRight: 4, letterSpacing: 1 }}>版</span>
       {PAGES.map((p) => {
         const current = path === p.href;
         return (
@@ -57,9 +57,9 @@ export default function CompareBar() {
               border: `1px solid ${current ? INK.text : INK.line}`,
             }}
           >
-            <span style={{ fontSize: 10, opacity: 0.75 }}>{p.tag}</span>
-            <span style={{ fontSize: 12.5, fontWeight: 600 }}>{p.label}</span>
-            <span style={{ fontSize: 10, opacity: 0.6 }}>{p.note}</span>
+            <span style={{ fontSize: 13, opacity: 0.75 }}>{p.tag}</span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{p.label}</span>
+            <span style={{ fontSize: 13, opacity: 0.6 }}>{p.note}</span>
           </Link>
         );
       })}

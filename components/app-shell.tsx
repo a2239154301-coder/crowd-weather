@@ -99,10 +99,10 @@ export default function AppShell() {
         >
           <div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-              <h1 style={{ margin: 0, fontSize: 21, fontWeight: 700, letterSpacing: 2 }}>
+              <h1 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: 2 }}>
                 CROWD WEATHER
               </h1>
-              <span style={{ fontSize: 12.5, color: INK.textDim }}>混雑は、予報できる。</span>
+              <span style={{ fontSize: 13, color: INK.textDim }}>混雑は、予報できる。</span>
             </div>
           </div>
 
@@ -147,8 +147,8 @@ export default function AppShell() {
                   textAlign: "left",
                 }}
               >
-                <span style={{ fontSize: 13.5, fontWeight: 700 }}>{label}</span>
-                <span style={{ fontSize: 10, opacity: 0.75 }}>{hint}</span>
+                <span style={{ fontSize: 15, fontWeight: 700 }}>{label}</span>
+                <span style={{ fontSize: 13, opacity: 0.75 }}>{hint}</span>
               </button>
             ))}
           </div>
@@ -187,7 +187,7 @@ export default function AppShell() {
                       borderRadius: 8,
                       border: "none",
                       cursor: "pointer",
-                      fontSize: 12.5,
+                      fontSize: 13,
                       fontWeight: 600,
                       background: view === k ? INK.raised : "transparent",
                       color: view === k ? INK.text : INK.textDim,
@@ -214,7 +214,7 @@ export default function AppShell() {
                 {STEPS.map((s, i) => (
                   <li key={s.n} style={{ display: "flex", alignItems: "center" }}>
                     {i > 0 && (
-                      <span style={{ color: INK.textFaint, fontSize: 11, padding: "0 7px" }}>→</span>
+                      <span style={{ color: INK.textFaint, fontSize: 13, padding: "0 7px" }}>→</span>
                     )}
                     <button
                       onClick={() => s.goto && setView(s.goto)}
@@ -236,7 +236,7 @@ export default function AppShell() {
                       <span
                         className="cw-mono"
                         style={{
-                          fontSize: 10,
+                          fontSize: 13,
                           border: `1px solid ${INK.line}`,
                           borderRadius: 999,
                           width: 16,
@@ -248,7 +248,7 @@ export default function AppShell() {
                       >
                         {s.n}
                       </span>
-                      <span style={{ fontSize: 11.5, fontWeight: 600 }}>{s.label}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{s.label}</span>
                     </button>
                   </li>
                 ))}
@@ -293,7 +293,7 @@ export default function AppShell() {
                       borderRadius: 8,
                       border: "none",
                       cursor: "pointer",
-                      fontSize: 12.5,
+                      fontSize: 13,
                       fontWeight: 600,
                       background: liveView === k ? INK.raised : "transparent",
                       color: liveView === k ? INK.text : INK.textDim,
@@ -304,7 +304,7 @@ export default function AppShell() {
                   </button>
                 ))}
               </nav>
-              <span style={{ fontSize: 12, color: INK.textFaint }}>
+              <span style={{ fontSize: 13, color: INK.textFaint }}>
                 屋外・スマホ前提のため当日系の画面は明色
               </span>
             </div>
@@ -315,7 +315,7 @@ export default function AppShell() {
 
         {mode === "staff" && (
           <>
-            <p style={{ margin: "0 0 14px", fontSize: 12.5, color: INK.textDim, lineHeight: 1.8 }}>
+            <p style={{ margin: "0 0 14px", fontSize: 13, color: INK.textDim, lineHeight: 1.8 }}>
               現場スタッフのスマホ画面。名前で入場し、配置ポストの指示を受け、
               現地の混雑・暑さをワンタップで報告する。
             </p>
@@ -328,7 +328,7 @@ export default function AppShell() {
             <p
               style={{
                 margin: "0 0 14px",
-                fontSize: 12.5,
+                fontSize: 13,
                 color: INK.textDim,
                 lineHeight: 1.8,
               }}
@@ -357,7 +357,7 @@ export default function AppShell() {
             justifyContent: "space-between",
             gap: 12,
             flexWrap: "wrap",
-            fontSize: 11.5,
+            fontSize: 13,
             color: INK.textFaint,
           }}
         >

@@ -171,7 +171,7 @@ export default function HeatMap({ conditions }: { conditions: HeatConditions }) 
               border: `1px solid ${INK.line}`,
               borderRadius: 9,
               padding: "8px 12px",
-              fontSize: 12,
+              fontSize: 13,
               pointerEvents: "none",
             }}
           >
@@ -186,7 +186,7 @@ export default function HeatMap({ conditions }: { conditions: HeatConditions }) 
 
       <div style={{ display: "flex", gap: 14, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
         {WBGT_BANDS.map((b, i) => (
-          <span key={b.label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: INK.textDim }}>
+          <span key={b.label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: INK.textDim }}>
             <span style={{ width: 13, height: 13, borderRadius: 3, background: b.color }} />
             {b.label}
             <span className="cw-mono" style={{ color: INK.textFaint }}>
@@ -194,7 +194,7 @@ export default function HeatMap({ conditions }: { conditions: HeatConditions }) 
             </span>
           </span>
         ))}
-        <span className="cw-mono" style={{ marginLeft: "auto", fontSize: 11, color: INK.textFaint }}>
+        <span className="cw-mono" style={{ marginLeft: "auto", fontSize: 13, color: INK.textFaint }}>
           場内 {field.min.toFixed(1)} – {field.max.toFixed(1)} ℃ ／ 格子 {field.cols}×{field.rows}
         </span>
       </div>
@@ -210,9 +210,9 @@ export default function HeatMap({ conditions }: { conditions: HeatConditions }) 
               padding: "10px 13px",
             }}
           >
-            <div style={{ fontSize: 11, color: INK.textFaint }}>最も暑い場所 {zoneStats.indexOf(s) + 1}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>{s.zone.name}</div>
-            <div className="cw-mono" style={{ fontSize: 12, color: wbgtBand(s.max).color, marginTop: 3 }}>
+            <div style={{ fontSize: 13, color: INK.textFaint }}>最も暑い場所 {zoneStats.indexOf(s) + 1}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>{s.zone.name}</div>
+            <div className="cw-mono" style={{ fontSize: 13, color: wbgtBand(s.max).color, marginTop: 3 }}>
               最大 {s.max.toFixed(1)} ／ 平均 {s.mean.toFixed(1)} ・ {wbgtBand(s.max).label}
             </div>
           </div>

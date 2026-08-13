@@ -191,13 +191,13 @@ export default function IngestPanel() {
           padding: 16,
         }}
       >
-        <div style={{ fontSize: 11, letterSpacing: 1.5, color: INK.textFaint }}>
+        <div style={{ fontSize: 13, letterSpacing: 1.5, color: INK.textFaint }}>
           VENUE INGEST — OrcaRouter Vision + Structured Outputs
         </div>
         <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>
           会場資料を、予報が読める地図に変換する。
         </div>
-        <div style={{ fontSize: 12, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
+        <div style={{ fontSize: 13, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
           航空写真・会場図面を投げると、ゾーン（人が滞留する場所）と構造物（影を落とすもの）を
           読み取って構造化する。会場ごとに<b>1回きり</b>の処理。様式がバラバラな会場資料を
           ルールベースで読むことはできない — ここがLLMでないと成立しない中核。
@@ -260,7 +260,7 @@ export default function IngestPanel() {
               サンプル会場で試す
             </button>
           </div>
-          <div style={{ marginTop: 10, fontSize: 10.5, color: INK.textFaint }}>
+          <div style={{ marginTop: 10, fontSize: 13, color: INK.textFaint }}>
             送信前にブラウザ内で長辺{RESIZE_LONG_EDGE}pxへ縮小するため、元画像は端末の外に出ない
           </div>
           <input
@@ -302,7 +302,7 @@ export default function IngestPanel() {
               border: "1px solid #E5254A66",
               background: "#E5254A14",
               color: "#FCA5A5",
-              fontSize: 12.5,
+              fontSize: 13,
               lineHeight: 1.7,
             }}
           >
@@ -387,7 +387,7 @@ export default function IngestPanel() {
                 })}
               </svg>
             </div>
-            <div style={{ marginTop: 8, fontSize: 10.5, color: INK.textFaint, lineHeight: 1.6 }}>
+            <div style={{ marginTop: 8, fontSize: 13, color: INK.textFaint, lineHeight: 1.6 }}>
               読み取ったゾーン（色つき）と構造物（破線）を元画像に重ねて表示。
               位置は人が補正する前提の初期案。
             </div>
@@ -412,7 +412,7 @@ export default function IngestPanel() {
                 </Chip>
               </div>
               {result.venue.notes && (
-                <p style={{ margin: "10px 0 0", fontSize: 12, lineHeight: 1.8, color: INK.textDim }}>
+                <p style={{ margin: "10px 0 0", fontSize: 13, lineHeight: 1.8, color: INK.textDim }}>
                   <b style={{ color: INK.text }}>AIからの申し送り:</b> {result.venue.notes}
                 </p>
               )}
@@ -425,7 +425,7 @@ export default function IngestPanel() {
                     <li
                       key={i}
                       style={{
-                        fontSize: 11.5,
+                        fontSize: 13,
                         lineHeight: 1.6,
                         color: it.level === "error" ? "#FCA5A5" : "#FDBA74",
                       }}
@@ -452,7 +452,7 @@ export default function IngestPanel() {
                 <Chip color="#86EFAC">{formatYen(costYenForMeta(result.meta))}</Chip>
               </div>
               {resize && (
-                <div className="cw-mono" style={{ marginTop: 9, fontSize: 10.5, color: INK.textFaint, lineHeight: 1.7 }}>
+                <div className="cw-mono" style={{ marginTop: 9, fontSize: 13, color: INK.textFaint, lineHeight: 1.7 }}>
                   送信前縮小: {Math.round(resize.fromW)}×{Math.round(resize.fromH)} {fmtKB(resize.fromKB)} →{" "}
                   {resize.toW}×{resize.toH} {fmtKB(resize.toKB)}
                 </div>
@@ -482,8 +482,8 @@ function ResultCard({ title, note, children }: { title: string; note?: string; c
   return (
     <div style={{ background: INK.surface, border: `1px solid ${INK.line}`, borderRadius: 12, padding: 15 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, letterSpacing: 0.4 }}>{title}</h2>
-        {note && <span style={{ fontSize: 10.5, color: INK.textFaint }}>{note}</span>}
+        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, letterSpacing: 0.4 }}>{title}</h2>
+        {note && <span style={{ fontSize: 13, color: INK.textFaint }}>{note}</span>}
       </div>
       {children}
     </div>
@@ -494,7 +494,7 @@ function Chip({ color, children }: { color: string; children: React.ReactNode })
   return (
     <span
       style={{
-        fontSize: 11.5,
+        fontSize: 13,
         fontWeight: 600,
         color,
         background: `${color}1A`,

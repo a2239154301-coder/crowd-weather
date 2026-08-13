@@ -156,13 +156,13 @@ export default function VisitorRoute({ scenario, hour }: Props) {
           padding: 16,
         }}
       >
-        <div className="cw-mono" style={{ fontSize: 11, letterSpacing: 1.5, color: INK.textFaint }}>
+        <div className="cw-mono" style={{ fontSize: 13, letterSpacing: 1.5, color: INK.textFaint }}>
           SAFE ROUTE ── 言葉で聞ける会場の道案内
         </div>
         <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>
           いちばん近い道が、いちばん安全とはかぎらない。
         </div>
-        <div style={{ fontSize: 12, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
+        <div style={{ fontSize: 13, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
           AIが使われるのは<b style={{ color: INK.text }}>言葉を条件に翻訳するところと、結果を言葉にするところ</b>だけ。
           <b style={{ color: INK.text }}>経路そのものの計算にAIは使っていません</b>
           （毎回同じ答えが出る必要があるため）。翻訳した条件は必ず画面に出すので、
@@ -185,7 +185,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
               border: `1px solid ${INK.line}`,
               background: INK.raised,
               color: INK.text,
-              fontSize: 14,
+              fontSize: 15,
             }}
           />
           <button
@@ -199,7 +199,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
               background: askBusy ? INK.raised : INK.accent,
               color: askBusy ? INK.textDim : INK.page,
               fontWeight: 700,
-              fontSize: 14,
+              fontSize: 15,
               cursor: askBusy ? "wait" : "pointer",
               whiteSpace: "nowrap",
             }}
@@ -215,7 +215,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
               marginTop: 10,
               padding: "11px 13px",
               borderRadius: 10,
-              fontSize: 13.5,
+              fontSize: 15,
               lineHeight: 1.7,
               background: INK.raised,
               border: `1px solid ${intent.ok ? INK.accent : "#FB7A1E"}55`,
@@ -225,7 +225,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
             <span style={{ color: INK.textDim }}>{intent.ok ? "こう解釈しました：" : "解釈できませんでした："}</span>{" "}
             {intent.text}
             {intent.ok && (
-              <div style={{ fontSize: 12, color: INK.textFaint, marginTop: 5 }}>
+              <div style={{ fontSize: 13, color: INK.textFaint, marginTop: 5 }}>
                 違っていたら下の項目で直せます。経路の計算はこの解釈が確定してから行います。
               </div>
             )}
@@ -264,12 +264,12 @@ export default function VisitorRoute({ scenario, hour }: Props) {
                 color: pref === p.key ? INK.page : INK.textDim,
                 cursor: "pointer",
                 fontWeight: 700,
-                fontSize: 12.5,
+                fontSize: 13,
                 lineHeight: 1.4,
               }}
             >
               {p.label}
-              <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.8 }}>{p.hint}</div>
+              <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.8 }}>{p.hint}</div>
             </button>
           ))}
         </div>
@@ -282,7 +282,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
             border: `1px dashed ${INK.line}`,
             borderRadius: 14,
             padding: 16,
-            fontSize: 12.5,
+            fontSize: 13,
             color: INK.textDim,
           }}
         >
@@ -401,7 +401,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
                 padding: 15,
               }}
             >
-              <div className="cw-mono" style={{ fontSize: 24, fontWeight: 700, color: INK.text }}>
+              <div className="cw-mono" style={{ fontSize: 26, fontWeight: 700, color: INK.text }}>
                 徒歩 約{route.minutes}分
                 <span style={{ fontSize: 13, color: INK.textDim, fontWeight: 400 }}> / {route.meters}m</span>
               </div>
@@ -426,7 +426,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
                     background: "#FB7A1E14",
                     border: "1px solid #FB7A1E55",
                     color: "#FDBA74",
-                    fontSize: 11.5,
+                    fontSize: 13,
                     lineHeight: 1.7,
                   }}
                 >
@@ -440,7 +440,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
                     <span
                       className="cw-mono"
                       style={{
-                        fontSize: 10,
+                        fontSize: 13,
                         color: INK.textFaint,
                         border: `1px solid ${INK.line}`,
                         borderRadius: 999,
@@ -450,14 +450,14 @@ export default function VisitorRoute({ scenario, hour }: Props) {
                     >
                       {i + 1}
                     </span>
-                    <span style={{ flex: 1, fontSize: 12.5 }}>{s.zone.name}</span>
+                    <span style={{ flex: 1, fontSize: 13 }}>{s.zone.name}</span>
                     <span
                       className="cw-mono"
-                      style={{ fontSize: 10.5, color: densityBand(s.density).color }}
+                      style={{ fontSize: 13, color: densityBand(s.density).color }}
                     >
                       {s.density}
                     </span>
-                    <span className="cw-mono" style={{ fontSize: 10.5, color: "#7DD3FC" }}>
+                    <span className="cw-mono" style={{ fontSize: 13, color: "#7DD3FC" }}>
                       日陰{Math.round(s.shadeFraction * 100)}%
                     </span>
                   </li>
@@ -484,18 +484,18 @@ export default function VisitorRoute({ scenario, hour }: Props) {
                   background: "transparent",
                   color: noteBusy ? INK.textFaint : INK.text,
                   fontWeight: 700,
-                  fontSize: 12.5,
+                  fontSize: 13,
                   cursor: noteBusy ? "wait" : "pointer",
                 }}
               >
                 {noteBusy ? "説明を作成中…" : "この道を、ことばで説明してもらう"}
               </button>
               {note && (
-                <div style={{ marginTop: 11, fontSize: 12.5, lineHeight: 1.9, whiteSpace: "pre-wrap" }}>
+                <div style={{ marginTop: 11, fontSize: 13, lineHeight: 1.9, whiteSpace: "pre-wrap" }}>
                   {note}
                 </div>
               )}
-              <div className="cw-mono" style={{ marginTop: 9, fontSize: 9.5, color: INK.textFaint, lineHeight: 1.6 }}>
+              <div className="cw-mono" style={{ marginTop: 9, fontSize: 13, color: INK.textFaint, lineHeight: 1.6 }}>
                 経路 = ダイクストラ法（LLM不使用）
                 {noteModel ? ` ／ 説明 = ${noteModel}（${formatYen(noteYen)}）` : ""}
               </div>
@@ -510,7 +510,7 @@ export default function VisitorRoute({ scenario, hour }: Props) {
 function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "block" }}>
-      <span style={{ display: "block", fontSize: 11.5, color: INK.textDim, marginBottom: 5 }}>
+      <span style={{ display: "block", fontSize: 13, color: INK.textDim, marginBottom: 5 }}>
         {label}
       </span>
       {children}
@@ -554,7 +554,7 @@ function Chip({ color, children }: { color: string; children: React.ReactNode })
   return (
     <span
       style={{
-        fontSize: 11.5,
+        fontSize: 13,
         fontWeight: 600,
         color,
         background: `${color}1A`,

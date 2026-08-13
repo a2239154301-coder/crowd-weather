@@ -99,7 +99,7 @@ export default function HeatmapConsole() {
             border: `1px solid ${INK.line}`,
             background: INK.surface,
             color: INK.textDim,
-            fontSize: 12.5,
+            fontSize: 13,
             fontWeight: 600,
             textDecoration: "none",
             marginBottom: 14,
@@ -109,7 +109,7 @@ export default function HeatmapConsole() {
         </a>
 
         <header style={{ marginBottom: 14 }}>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: 1 }}>
+          <h1 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: 1 }}>
             会場図（全画面）
           </h1>
           <p style={{ margin: "6px 0 0", fontSize: 13, color: INK.textDim, lineHeight: 1.8, maxWidth: 820 }}>
@@ -154,7 +154,7 @@ export default function HeatmapConsole() {
           {view === "risk" && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               {[...TIME_BANDS].reverse().map((b) => (
-                <span key={b.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: INK.textDim }}>
+                <span key={b.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: INK.textDim }}>
                   <span style={{ width: 11, height: 11, borderRadius: 3, background: b.color, display: "inline-block" }} />
                   {b.label}
                 </span>
@@ -223,7 +223,7 @@ export default function HeatmapConsole() {
                 <input type="range" min={2000} max={60000} step={1000} value={scenario.tickets} onChange={(e) => set("tickets", +e.target.value)} />
                 <Val>{scenario.tickets.toLocaleString()}枚</Val>
               </Row>
-              <div className="cw-mono" style={{ fontSize: 12, color: INK.textFaint, lineHeight: 1.7, marginTop: 4 }}>
+              <div className="cw-mono" style={{ fontSize: 13, color: INK.textFaint, lineHeight: 1.7, marginTop: 4 }}>
                 {scenario.geo.name} {scenario.geo.lat}N {scenario.geo.lon}E
                 <br />
                 {scenario.date.label}

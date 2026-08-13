@@ -98,7 +98,7 @@ export default function TrustPanel() {
             })}
           </tbody>
         </table>
-        <p style={{ ...pStyle, color: INK.textFaint, fontSize: 12.5 }}>
+        <p style={{ ...pStyle, color: INK.textFaint, fontSize: 13 }}>
           モデル選定は9モデルの実測ベンチ（scripts/bench.mjs・2026-08-09）による。
           単価は各プロバイダの公表値（OrcaRouterはゼロマークアップ＝上乗せなし）。
         </p>
@@ -158,7 +158,7 @@ export default function TrustPanel() {
         </table>
 
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: INK.text, marginBottom: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: INK.text, marginBottom: 6 }}>
             削減施策（すべて実測に基づく判断）
           </div>
           <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.9, color: INK.textDim }}>
@@ -255,7 +255,7 @@ const tableStyle: React.CSSProperties = {
 const thStyle: React.CSSProperties = {
   textAlign: "left",
   padding: "7px 10px",
-  fontSize: 11.5,
+  fontSize: 13,
   color: INK.textFaint,
   borderBottom: `1px solid ${INK.line}`,
   fontWeight: 600,
@@ -273,8 +273,8 @@ function Card({ title, note, children }: { title: string; note: string; children
   return (
     <section style={{ background: INK.surface, border: `1px solid ${INK.line}`, borderRadius: 12, padding: 18 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{title}</h2>
-        <span style={{ fontSize: 12, color: INK.textFaint }}>{note}</span>
+        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{title}</h2>
+        <span style={{ fontSize: 13, color: INK.textFaint }}>{note}</span>
       </div>
       {children}
     </section>
@@ -284,11 +284,11 @@ function Card({ title, note, children }: { title: string; note: string; children
 function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <div style={{ background: INK.raised, border: `1px solid ${INK.line}`, borderRadius: 11, padding: "12px 14px" }}>
-      <div style={{ fontSize: 11.5, color: INK.textFaint }}>{label}</div>
-      <div className="cw-mono" style={{ fontSize: 24, fontWeight: 700, marginTop: 3, color: INK.text }}>
+      <div style={{ fontSize: 13, color: INK.textFaint }}>{label}</div>
+      <div className="cw-mono" style={{ fontSize: 26, fontWeight: 700, marginTop: 3, color: INK.text }}>
         {value}
       </div>
-      <div style={{ fontSize: 11.5, color: INK.textDim, marginTop: 3, lineHeight: 1.6 }}>{sub}</div>
+      <div style={{ fontSize: 13, color: INK.textDim, marginTop: 3, lineHeight: 1.6 }}>{sub}</div>
     </div>
   );
 }
@@ -296,8 +296,8 @@ function Stat({ label, value, sub }: { label: string; value: string; sub: string
 function SecRow({ title, body }: { title: string; body: string }) {
   return (
     <div style={{ background: INK.raised, border: `1px solid ${INK.line}`, borderRadius: 11, padding: "12px 14px" }}>
-      <div style={{ fontSize: 13.5, fontWeight: 700, color: INK.text }}>{title}</div>
-      <div style={{ fontSize: 12.5, color: INK.textDim, marginTop: 5, lineHeight: 1.8 }}>{body}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: INK.text }}>{title}</div>
+      <div style={{ fontSize: 13, color: INK.textDim, marginTop: 5, lineHeight: 1.8 }}>{body}</div>
     </div>
   );
 }

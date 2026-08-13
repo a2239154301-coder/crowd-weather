@@ -206,7 +206,7 @@ export default function LiveConsole() {
             color: "#FFFFFF",
             borderRadius: 999,
             padding: "7px 14px",
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: 700,
             letterSpacing: 1,
           }}
@@ -230,7 +230,7 @@ export default function LiveConsole() {
           </StepButton>
         </div>
 
-        <div style={{ fontSize: 14, color: DAY.textDim, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 15, color: DAY.textDim, lineHeight: 1.5 }}>
           {VENUE.name}
           <br />
           <span style={{ fontSize: 13, color: DAY.textFaint }}>
@@ -288,7 +288,7 @@ export default function LiveConsole() {
                   color: "#FFFFFF",
                   borderRadius: 8,
                   padding: "5px 13px",
-                  fontSize: 20,
+                  fontSize: 19,
                   fontWeight: 700,
                 }}
               >
@@ -331,7 +331,7 @@ export default function LiveConsole() {
         </div>
         {next ? (
           <>
-            <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.5 }}>
               <span className="cw-mono">{next.dangerHour}:00</span> に{" "}
               <span style={{ borderBottom: `3px solid ${timeBand(next.hoursToDanger).color}` }}>
                 {next.zone.name}
@@ -406,7 +406,7 @@ export default function LiveConsole() {
             border: "none",
             background: aiBusy ? "#93A3C0" : "#0B111F",
             color: "#FFFFFF",
-            fontSize: 20,
+            fontSize: 19,
             fontWeight: 700,
             cursor: aiBusy ? "wait" : "pointer",
           }}
@@ -417,7 +417,7 @@ export default function LiveConsole() {
           <div
             style={{
               marginTop: 14,
-              fontSize: 16,
+              fontSize: 15,
               lineHeight: 1.9,
               whiteSpace: "pre-wrap",
               color: DAY.text,
@@ -434,7 +434,7 @@ export default function LiveConsole() {
           </div>
         )}
         {!directive && !aiBusy && (
-          <p style={{ margin: "10px 0 0", fontSize: 14, color: DAY.textFaint, lineHeight: 1.7 }}>
+          <p style={{ margin: "10px 0 0", fontSize: 15, color: DAY.textFaint, lineHeight: 1.7 }}>
             いま危険なゾーンと、この先危険になるゾーンをそのまま渡して指示書を起草します。
             予報の計算そのものにLLMは使っていません。
           </p>
@@ -606,7 +606,7 @@ function StepButton({
         border: `1px solid ${DAY.line}`,
         background: DAY.surface,
         color: DAY.text,
-        fontSize: 16,
+        fontSize: 15,
         cursor: "pointer",
       }}
     >

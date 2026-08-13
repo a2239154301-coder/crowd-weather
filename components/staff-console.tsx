@@ -181,7 +181,7 @@ export default function StaffConsole() {
   if (!me) {
     return (
       <div style={{ ...cardWrap, maxWidth: 420 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>入場</div>
+        <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>入場</div>
         <p style={{ margin: "0 0 12px", fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
           名前を入れて、割り当てられたポストを選んでください（配置は計画から自動生成）。
         </p>
@@ -214,18 +214,18 @@ export default function StaffConsole() {
   return (
     <div style={{ ...cardWrap, maxWidth: 460 }}>
       {toast && (
-        <div role="status" style={{ background: DAY.text, color: "#FFF", borderRadius: 10, padding: "10px 14px", fontSize: 14, marginBottom: 10 }}>
+        <div role="status" style={{ background: DAY.text, color: "#FFF", borderRadius: 10, padding: "10px 14px", fontSize: 15, marginBottom: 10 }}>
           {toast}
         </div>
       )}
 
       {/* 自分の配置 */}
       <div style={panel}>
-        <div style={{ fontSize: 12, color: DAY.textFaint }}>あなたの配置（計画から）</div>
-        <div style={{ fontSize: 20, fontWeight: 700, margin: "2px 0" }}>
+        <div style={{ fontSize: 13, color: DAY.textFaint }}>あなたの配置（計画から）</div>
+        <div style={{ fontSize: 19, fontWeight: 700, margin: "2px 0" }}>
           {me.name} — {me.zoneName}・{ROLE_LABEL[me.role]}
         </div>
-        <div style={{ fontSize: 12.5, color: DAY.textDim }}>
+        <div style={{ fontSize: 13, color: DAY.textDim }}>
           ポスト {me.postCode} ／ いま: <b style={{ color: DAY.text }}>{stateLabel[state]}</b>
         </div>
         <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
@@ -238,7 +238,7 @@ export default function StaffConsole() {
             localStorage.removeItem(LS_KEY);
             setMe(null);
           }}
-          style={{ ...ghostBtn, marginTop: 8, fontSize: 12 }}
+          style={{ ...ghostBtn, marginTop: 8, fontSize: 13 }}
         >
           入場し直す
         </button>
@@ -246,8 +246,8 @@ export default function StaffConsole() {
 
       {/* 受信箱 */}
       <div style={panel}>
-        <div style={{ fontSize: 12, color: DAY.textFaint, marginBottom: 6 }}>受信箱（5秒ごとに更新）</div>
-        {active.length === 0 && <div style={{ fontSize: 14, color: DAY.textDim }}>新しい指示はありません</div>}
+        <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 6 }}>受信箱（5秒ごとに更新）</div>
+        {active.length === 0 && <div style={{ fontSize: 15, color: DAY.textDim }}>新しい指示はありません</div>}
         {active.map((d) => (
           <div
             key={d.id}
@@ -259,11 +259,11 @@ export default function StaffConsole() {
               marginBottom: 8,
             }}
           >
-            <div style={{ fontSize: 16, fontWeight: 700 }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>
               {d.toZoneName}へ{d.urgency === "now" ? "。いますぐ" : ""}
             </div>
-            <div style={{ fontSize: 14, margin: "2px 0" }}>{d.action}</div>
-            {d.reason && <div style={{ fontSize: 12, color: DAY.textDim }}>理由: {d.reason}</div>}
+            <div style={{ fontSize: 15, margin: "2px 0" }}>{d.action}</div>
+            {d.reason && <div style={{ fontSize: 13, color: DAY.textDim }}>理由: {d.reason}</div>}
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
               {d.status === "sent" && (
                 <button onClick={() => respond(d, "moving")} style={{ ...primaryBtn, flex: 1 }}>
@@ -280,7 +280,7 @@ export default function StaffConsole() {
 
       {/* 報告 */}
       <div style={panel}>
-        <div style={{ fontSize: 12, color: DAY.textFaint, marginBottom: 6 }}>
+        <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 6 }}>
           いまの状況を報告（{me.zoneName}）
         </div>
         <ReportRow label="混雑" onPick={(n) => sendButtonReport("crowd", n)} disabled={sending} />
@@ -318,7 +318,7 @@ function StateBtn({ label, active, onClick }: { label: string; active: boolean; 
         border: `1px solid ${active ? DAY.text : DAY.line}`,
         background: active ? DAY.text : DAY.surface,
         color: active ? "#FFF" : DAY.text,
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: 700,
         cursor: "pointer",
       }}
@@ -333,7 +333,7 @@ function ReportRow({ label, onPick, disabled }: { label: string; onPick: (n: num
   const colors = ["#22C55E", "#A3E635", "#FDE047", "#FB7A1E", "#E5254A"];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-      <span style={{ width: 40, fontSize: 13.5, fontWeight: 700 }}>{label}</span>
+      <span style={{ width: 40, fontSize: 15, fontWeight: 700 }}>{label}</span>
       {[1, 2, 3, 4, 5].map((n) => (
         <button
           key={n}
@@ -347,7 +347,7 @@ function ReportRow({ label, onPick, disabled }: { label: string; onPick: (n: num
             border: `2px solid ${colors[n - 1]}`,
             background: DAY.surface,
             color: DAY.text,
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: 700,
             cursor: "pointer",
           }}
@@ -395,7 +395,7 @@ const primaryBtn: React.CSSProperties = {
   border: "none",
   background: DAY.text,
   color: "#FFF",
-  fontSize: 14.5,
+  fontSize: 15,
   fontWeight: 700,
   cursor: "pointer",
 };
@@ -407,6 +407,6 @@ const ghostBtn: React.CSSProperties = {
   border: `1px solid ${DAY.line}`,
   background: DAY.surface,
   color: DAY.text,
-  fontSize: 13.5,
+  fontSize: 15,
   cursor: "pointer",
 };

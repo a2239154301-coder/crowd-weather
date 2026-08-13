@@ -248,15 +248,15 @@ export default function AdjustConsole() {
           style={{ flex: 1, minWidth: 160 }}
           aria-label="時刻"
         />
-        <span className="cw-mono" style={{ fontSize: 22, fontWeight: 700, width: 70 }}>{hour}:00</span>
-        <span style={{ fontSize: 11.5, color: DAY.textFaint }}>カメラ・過去実績は（デモデータ）</span>
+        <span className="cw-mono" style={{ fontSize: 19, fontWeight: 700, width: 70 }}>{hour}:00</span>
+        <span style={{ fontSize: 13, color: DAY.textFaint }}>カメラ・過去実績は（デモデータ）</span>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
         {/* ── 1. 観測フィード ── */}
         <section style={panel}>
           <h3 style={h3}>観測フィード</h3>
-          <div style={{ fontSize: 11.5, color: DAY.textFaint, marginBottom: 6 }}>カメラ実測（デモデータ・5分間隔）</div>
+          <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 6 }}>カメラ実測（デモデータ・5分間隔）</div>
           {latestFrames(nowMinutes, densityOf).map((f) => {
             const cam = CAMERAS.find((c) => c.id === f.cameraId)!;
             return (
@@ -267,7 +267,7 @@ export default function AdjustConsole() {
               </div>
             );
           })}
-          <div style={{ fontSize: 11.5, color: DAY.textFaint, margin: "10px 0 6px" }}>スタッフ報告（構造化済み）</div>
+          <div style={{ fontSize: 13, color: DAY.textFaint, margin: "10px 0 6px" }}>スタッフ報告（構造化済み）</div>
           {reports.length === 0 && <div style={{ fontSize: 13, color: DAY.textDim }}>まだ報告はありません</div>}
           {reports.slice(0, 6).map((r) => (
             <div
@@ -278,11 +278,11 @@ export default function AdjustConsole() {
                 borderRadius: "0 8px 8px 0",
                 padding: "6px 9px",
                 marginBottom: 6,
-                fontSize: 12.5,
+                fontSize: 13,
               }}
             >
               <b>{r.summary}</b>
-              <div style={{ color: DAY.textFaint, fontSize: 11.5 }}>
+              <div style={{ color: DAY.textFaint, fontSize: 13 }}>
                 {r.name}・{new Date(r.at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
                 {r.source === "staff-text" ? "・自由文→AI構造化" : ""}
               </div>
@@ -306,11 +306,11 @@ export default function AdjustConsole() {
               onClick={() => setZoneSel(c.zone.id)}
               style={{ display: "block", width: "100%", textAlign: "left", background: "#FFF", border: `1px solid ${DAY.line}`, borderRadius: 9, padding: "8px 10px", marginBottom: 6, cursor: "pointer" }}
             >
-              <div style={{ fontSize: 13.5, fontWeight: 700 }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>
                 {c.zone.name} 予測{c.predicted} → <span style={{ color: c.correctedValue > c.predicted ? DAY.danger : "#0F6E56" }}>補正{c.correctedValue}</span>
-                {c.conflict && <span style={{ marginLeft: 6, fontSize: 11, color: DAY.danger }}>観測が食い違い→無線確認</span>}
+                {c.conflict && <span style={{ marginLeft: 6, fontSize: 13, color: DAY.danger }}>観測が食い違い→無線確認</span>}
               </div>
-              <div style={{ fontSize: 11.5, color: DAY.textFaint }}>{evidenceLabel(c.zone.kind, c.correctedValue)}・クリックでチャート</div>
+              <div style={{ fontSize: 13, color: DAY.textFaint }}>{evidenceLabel(c.zone.kind, c.correctedValue)}・クリックでチャート</div>
             </button>
           ))}
           {/* 分析チャート */}
@@ -330,7 +330,7 @@ export default function AdjustConsole() {
         {/* ── 3. 配置ボード ── */}
         <section style={panel}>
           <h3 style={h3}>配置ボード</h3>
-          <div style={{ fontSize: 11.5, color: DAY.textFaint, marginBottom: 6 }}>
+          <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 6 }}>
             申告の最終状態＋時刻。15分更新なしは「古い」。現実とズレたら無線で確認して指示で正す
           </div>
           {posts.map((p: Post) => {
@@ -340,15 +340,15 @@ export default function AdjustConsole() {
                 <span className="cw-mono" style={{ width: 40, fontWeight: 700 }}>{p.code}</span>
                 <span style={{ flex: 1 }}>{p.zoneName}・{ROLE_LABEL[p.role]}</span>
                 {assigned.length === 0 ? (
-                  <span style={{ color: DAY.danger, fontWeight: 700, fontSize: 12 }}>空席</span>
+                  <span style={{ color: DAY.danger, fontWeight: 700, fontSize: 13 }}>空席</span>
                 ) : (
                   assigned.map((s) => (
-                    <span key={s.name} style={{ fontSize: 12.5 }}>
+                    <span key={s.name} style={{ fontSize: 13 }}>
                       {s.name}
                       <b style={{ marginLeft: 4, color: s.state === "onpost" ? "#0F6E56" : s.state === "moving" ? "#B45309" : DAY.danger }}>
                         {s.state === "onpost" ? "着任" : s.state === "moving" ? "移動中" : "離脱"}
                       </b>
-                      {stale(s) && <span style={{ color: DAY.danger, fontSize: 11 }}>（古い）</span>}
+                      {stale(s) && <span style={{ color: DAY.danger, fontSize: 13 }}>（古い）</span>}
                     </span>
                   ))
                 )}
@@ -357,7 +357,7 @@ export default function AdjustConsole() {
           })}
           {/* 未達の指示 */}
           {dispatches.filter((d) => d.status === "sent" && Date.now() - d.createdAt > 10 * 60_000).map((d) => (
-            <div key={d.id} style={{ marginTop: 8, fontSize: 12.5, color: DAY.danger }}>
+            <div key={d.id} style={{ marginTop: 8, fontSize: 13, color: DAY.danger }}>
               ⚠ {d.staffName}への指示（{d.toZoneName}）が10分以上未達 — 再送か無線確認を
             </div>
           ))}
@@ -366,24 +366,24 @@ export default function AdjustConsole() {
         {/* ── 4. AI提案 → 承認 → 配信 ── */}
         <section style={{ ...panel, borderColor: DAY.text, borderWidth: 2 }}>
           <h3 style={h3}>AI配置提案（承認するまで配信されない）</h3>
-          <button onClick={askProposal} disabled={aiBusy} style={{ width: "100%", minHeight: 52, borderRadius: 10, border: "none", background: aiBusy ? "#93A3C0" : DAY.text, color: "#FFF", fontSize: 15.5, fontWeight: 700, cursor: aiBusy ? "wait" : "pointer" }}>
+          <button onClick={askProposal} disabled={aiBusy} style={{ width: "100%", minHeight: 52, borderRadius: 10, border: "none", background: aiBusy ? "#93A3C0" : DAY.text, color: "#FFF", fontSize: 15, fontWeight: 700, cursor: aiBusy ? "wait" : "pointer" }}>
             {aiBusy ? "起草中…" : "観測と予報から提案を作る"}
           </button>
-          {aiMetaLine && <div className="cw-mono" style={{ fontSize: 11, color: DAY.textFaint, marginTop: 4 }}>{aiMetaLine}</div>}
-          {proposalNote && <p style={{ margin: "8px 0 0", fontSize: 12.5, color: DAY.textDim }}>{proposalNote}</p>}
+          {aiMetaLine && <div className="cw-mono" style={{ fontSize: 13, color: DAY.textFaint, marginTop: 4 }}>{aiMetaLine}</div>}
+          {proposalNote && <p style={{ margin: "8px 0 0", fontSize: 13, color: DAY.textDim }}>{proposalNote}</p>}
           {proposals?.map((p, i) => (
             <div key={i} style={{ background: "#FFF", border: `1px solid ${DAY.line}`, borderRadius: 10, padding: "10px 12px", marginTop: 8 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 700 }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>
                 {p.fromCode} {p.staffName} → {zoneById(p.toZoneId)?.name ?? p.toZoneId}
-                {p.urgency === "now" && <span style={{ marginLeft: 6, color: DAY.danger, fontSize: 12 }}>いますぐ</span>}
+                {p.urgency === "now" && <span style={{ marginLeft: 6, color: DAY.danger, fontSize: 13 }}>いますぐ</span>}
               </div>
               <div style={{ fontSize: 13, margin: "2px 0" }}>{p.action}</div>
-              <div style={{ fontSize: 12, color: DAY.textFaint }}>{p.reason}</div>
+              <div style={{ fontSize: 13, color: DAY.textFaint }}>{p.reason}</div>
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                <button onClick={() => approve(p)} disabled={approving !== null} style={{ flex: 1, minHeight: 44, borderRadius: 9, border: "none", background: approving ? "#93A3C0" : DAY.text, color: "#FFF", fontWeight: 700, fontSize: 13.5, cursor: approving ? "wait" : "pointer" }}>
+                <button onClick={() => approve(p)} disabled={approving !== null} style={{ flex: 1, minHeight: 44, borderRadius: 9, border: "none", background: approving ? "#93A3C0" : DAY.text, color: "#FFF", fontWeight: 700, fontSize: 15, cursor: approving ? "wait" : "pointer" }}>
                   {approving === p ? "配信中…" : "承認して配信"}
                 </button>
-                <button onClick={() => setProposals((prev) => (prev ? prev.filter((x) => x !== p) : prev))} style={{ flex: 1, minHeight: 44, borderRadius: 9, border: `1px solid ${DAY.line}`, background: "#FFF", fontSize: 13.5, cursor: "pointer" }}>
+                <button onClick={() => setProposals((prev) => (prev ? prev.filter((x) => x !== p) : prev))} style={{ flex: 1, minHeight: 44, borderRadius: 9, border: `1px solid ${DAY.line}`, background: "#FFF", fontSize: 15, cursor: "pointer" }}>
                   却下
                 </button>
               </div>
@@ -470,7 +470,7 @@ function PhotoObsInput({
 
   return (
     <div style={{ marginTop: 10, borderTop: `1px solid ${DAY.line}`, paddingTop: 8 }}>
-      <div style={{ fontSize: 11.5, color: DAY.textFaint, marginBottom: 6 }}>
+      <div style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 6 }}>
         写真ナウキャスト（AIは1-5分類まで・採用は人間）
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
@@ -501,13 +501,13 @@ function PhotoObsInput({
           />
         </label>
       </div>
-      {note && <div style={{ fontSize: 12.5, color: DAY.textDim, marginTop: 6 }}>{note}</div>}
+      {note && <div style={{ fontSize: 13, color: DAY.textDim, marginTop: 6 }}>{note}</div>}
       {pending && (
         <div style={{ background: "#FFF", border: `1px solid ${DAY.line}`, borderRadius: 10, padding: "9px 11px", marginTop: 8 }}>
-          <div style={{ fontSize: 13.5 }}>
+          <div style={{ fontSize: 15 }}>
             AI分類: <b>レベル{pending.level}</b>（確信度 {pending.confidence === "high" ? "高" : pending.confidence === "low" ? "低" : "中"}）
           </div>
-          <div style={{ fontSize: 12.5, color: DAY.textDim }}>{pending.description}</div>
+          <div style={{ fontSize: 13, color: DAY.textDim }}>{pending.description}</div>
           <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
             <button
               onClick={() => {
@@ -567,7 +567,7 @@ function EgressPanel({ tickets }: { tickets: number }) {
         >
           {open ? "閉じる" : "計算する"}
         </button>
-        <span style={{ fontSize: 11.5, color: DAY.textFaint }}>
+        <span style={{ fontSize: 13, color: DAY.textFaint }}>
           ネットワーク流＋待ち行列（決定的計算・通路幅と流動係数60人/分/mは想定値）
         </span>
       </div>
@@ -576,7 +576,7 @@ function EgressPanel({ tickets }: { tickets: number }) {
           {(["exit", "plaza", "conc"] as const).map((node) => (
             <div key={node} style={{ background: "#FFF", border: `1px solid ${DAY.line}`, borderRadius: 10, padding: "10px 12px" }}>
               <div style={{ fontSize: 13, fontWeight: 700 }}>{NODE_LABEL[node]}</div>
-              <table style={{ width: "100%", fontSize: 12.5, marginTop: 6, borderCollapse: "collapse" }}>
+              <table style={{ width: "100%", fontSize: 13, marginTop: 6, borderCollapse: "collapse" }}>
                 <tbody>
                   <tr>
                     <td style={{ color: DAY.textFaint, padding: "3px 0" }}>一斉退場</td>
@@ -594,7 +594,7 @@ function EgressPanel({ tickets }: { tickets: number }) {
               </table>
             </div>
           ))}
-          <div style={{ gridColumn: "1 / -1", fontSize: 12.5, color: DAY.textDim, lineHeight: 1.7 }}>
+          <div style={{ gridColumn: "1 / -1", fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
             滞留解消: 一斉 {result.free.clearMin}分 ／ 規制 {result.reg.clearMin}分。
             規制退場は解消がやや遅れる代わりにピーク滞留が下がる（ピークが事故を起こす）。
             効果は詰まりが積み上がる箇所（退場動線・改札）に出る。上流の容量で律速される箇所
@@ -665,7 +665,7 @@ function AnalysisChart({
 
   return (
     <div style={{ marginTop: 10 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
         {zoneName} — 予測 × 実測 × 補正（{evidenceLabel(zone.kind, correctedCurve.find((c) => c.hour === hour)?.v ?? 0)}）
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", background: "#FFF", borderRadius: 8, border: `1px solid ${DAY.line}` }} role="img" aria-label={`${zoneName}の予測と実測の時系列`}>
@@ -704,7 +704,7 @@ function AnalysisChart({
           <text key={h} x={x(h)} y={H - 6} textAnchor="middle" fontSize={9} fill={DAY.textFaint}>{h}</text>
         ))}
       </svg>
-      <div style={{ display: "flex", gap: 12, fontSize: 11, color: DAY.textDim, marginTop: 4, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 12, fontSize: 13, color: DAY.textDim, marginTop: 4, flexWrap: "wrap" }}>
         <span>— 補正後</span>
         <span style={{ color: DAY.textFaint }}>-- 予測</span>
         <span style={{ color: "#185FA5" }}>● カメラ（デモ）</span>
@@ -725,4 +725,4 @@ const panel: React.CSSProperties = {
   padding: "12px 14px",
 };
 
-const h3: React.CSSProperties = { margin: "0 0 8px", fontSize: 14, fontWeight: 700 };
+const h3: React.CSSProperties = { margin: "0 0 8px", fontSize: 15, fontWeight: 700 };

@@ -358,7 +358,7 @@ export default function VenueMap({
           }}
         >
           <div style={{ fontSize: 13, fontWeight: 600, color: INK.text }}>{active.zone.name}</div>
-          <div style={{ marginTop: 6, display: "grid", gap: 3, fontSize: 12 }}>
+          <div style={{ marginTop: 6, display: "grid", gap: 3, fontSize: 13 }}>
             <Row
               label="混雑"
               value={`${active.density}`}
@@ -379,7 +379,7 @@ export default function VenueMap({
                 color={timeBand(activeRisk.hoursToDanger).color}
               />
             )}
-            <div style={{ color: INK.textDim, fontSize: 11 }}>
+            <div style={{ color: INK.textDim, fontSize: 13 }}>
               {hour}:00 ／ {active.shaded ? "日陰" : "日なた"}
             </div>
           </div>

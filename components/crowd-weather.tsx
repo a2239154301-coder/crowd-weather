@@ -134,8 +134,8 @@ function gateAdvice(hour, s) {
 const WeatherIcon = ({ w, size=18, color }) =>
   w==="sunny"?<Sun size={size} color={color}/>:w==="rainy"?<CloudRain size={size} color={color}/>:<Cloud size={size} color={color}/>;
 const Panel = ({children,style}) => <div style={{background:C.panel,border:`1px solid ${C.line}`,borderRadius:16,...style}}>{children}</div>;
-const Eyebrow = ({children}) => <div style={{fontFamily:mono,fontSize:11,letterSpacing:2,color:C.faint,textTransform:"uppercase"}}>{children}</div>;
-const Chip = ({c,children}) => <span style={{fontFamily:mono,fontSize:12,fontWeight:600,color:c,background:c+"1A",border:`1px solid ${c}44`,borderRadius:99,padding:"5px 11px"}}>{children}</span>;
+const Eyebrow = ({children}) => <div style={{fontFamily:mono,fontSize:13,letterSpacing:2,color:C.faint,textTransform:"uppercase"}}>{children}</div>;
+const Chip = ({c,children}) => <span style={{fontFamily:mono,fontSize:13,fontWeight:600,color:c,background:c+"1A",border:`1px solid ${c}44`,borderRadius:99,padding:"5px 11px"}}>{children}</span>;
 
 // 太陽位置インジケータ（3D都市モデル日陰計算のデモ簡略）
 function SunArc({ hour, weather }) {
@@ -178,7 +178,7 @@ function ZoneMap({ zones, hour, s, layer, height=280, mini=false, highlightShade
         <div key={i} title={p.label}
           style={{position:"absolute",left:`${p.x}%`,top:`${p.y}%`,transform:"translate(-50%,-50%)",
             width:16,height:16,borderRadius:"50%",background:p.c,border:`2px solid ${C.ink}`,
-            display:"grid",placeItems:"center",fontSize:8,fontWeight:800,color:C.ink,fontFamily:mono}}>{p.t}</div>
+            display:"grid",placeItems:"center",fontSize:13,fontWeight:800,color:C.ink,fontFamily:mono}}>{p.t}</div>
       ))}
     </div>
   );
@@ -283,8 +283,8 @@ export default function CrowdWeather() {
               <Cloud size={34} color={C.cool}/><Users size={15} color={C.ink} style={{position:"absolute",bottom:6}}/>
             </div>
             <div>
-              <div style={{fontWeight:700,fontSize:20,letterSpacing:1}}>CROWD&nbsp;WEATHER</div>
-              <div style={{fontFamily:mono,fontSize:11,color:C.muted,letterSpacing:1}}>混雑は、予報できる。</div>
+              <div style={{fontWeight:700,fontSize:19,letterSpacing:1}}>CROWD&nbsp;WEATHER</div>
+              <div style={{fontFamily:mono,fontSize:13,color:C.muted,letterSpacing:1}}>混雑は、予報できる。</div>
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -292,21 +292,21 @@ export default function CrowdWeather() {
               {[["ops","主催者コンソール",<Sliders key="a" size={13}/>],["app","来場者アプリ",<Smartphone key="b" size={13}/>],["data","データ設計",<Database key="c" size={13}/>]].map(([k,l,ic])=>(
                 <button key={k} onClick={()=>setView(k)}
                   style={{display:"flex",alignItems:"center",gap:6,padding:"8px 13px",borderRadius:9,cursor:"pointer",
-                    fontWeight:600,fontSize:12.5,border:"none",
+                    fontWeight:600,fontSize:13,border:"none",
                     background:view===k?C.cool:"transparent",color:view===k?C.ink:C.muted}}>{ic}{l}</button>
               ))}
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8,background:C.panel,border:`1px solid ${dayAlert.c}55`,borderRadius:99,padding:"8px 14px"}}>
               <AlertTriangle size={16} color={dayAlert.c}/>
               <div>
-                <div style={{fontFamily:mono,fontSize:10,color:C.faint,letterSpacing:1}}>本日の最大警戒</div>
+                <div style={{fontFamily:mono,fontSize:13,color:C.faint,letterSpacing:1}}>本日の最大警戒</div>
                 <div style={{fontWeight:700,fontSize:13,color:dayAlert.c}}>{dayAlert.label}・混雑{plan.peakD} / 暑熱{heatStyle(plan.peakW).label}</div>
               </div>
             </div>
           </div>
         </header>
 
-        <div style={{fontFamily:mono,fontSize:11,color:C.faint,marginBottom:14}}>
+        <div style={{fontFamily:mono,fontSize:13,color:C.faint,marginBottom:14}}>
           夏フェス想定・屋外会場 ／ 開場 {OPEN}:00 → 終演 {CLOSE}:00 ／ シナリオはB2B・来場者・計画書のすべてに連動
         </div>
 
@@ -316,7 +316,7 @@ export default function CrowdWeather() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:12,flexWrap:"wrap",gap:8}}>
               <div><Eyebrow>Hourly Forecast ── 時間帯別予報</Eyebrow>
                 <div style={{fontWeight:600,fontSize:15,marginTop:3}}>「今を見る」から「先を読む」へ</div></div>
-              <div style={{fontFamily:mono,fontSize:11,color:C.faint}}>タップでマップに反映 ↓</div>
+              <div style={{fontFamily:mono,fontSize:13,color:C.faint}}>タップでマップに反映 ↓</div>
             </div>
             <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
               {HOURS.map(h=>{
@@ -332,12 +332,12 @@ export default function CrowdWeather() {
                       <div title="混雑指数" style={{width:12,height:`${Math.max(6,st.maxD*0.42)}px`,background:ds.c,borderRadius:3}}/>
                       <div title="暑熱指数" style={{width:12,height:`${Math.max(6,(st.maxW-20)*3.4)}px`,background:hs.c,borderRadius:3,opacity:0.85}}/>
                     </div>
-                    <div style={{fontFamily:mono,fontSize:11,marginTop:5,color:ds.c}}>{st.maxD}</div>
+                    <div style={{fontFamily:mono,fontSize:13,marginTop:5,color:ds.c}}>{st.maxD}</div>
                   </button>
                 );
               })}
             </div>
-            <div style={{display:"flex",gap:16,marginTop:8,fontFamily:mono,fontSize:10,color:C.faint}}>
+            <div style={{display:"flex",gap:16,marginTop:8,fontFamily:mono,fontSize:13,color:C.faint}}>
               <span style={{display:"flex",alignItems:"center",gap:5}}><i style={{width:9,height:9,background:C.busy,borderRadius:2,display:"inline-block"}}/>混雑指数</span>
               <span style={{display:"flex",alignItems:"center",gap:5}}><i style={{width:9,height:9,background:C.heat,borderRadius:2,display:"inline-block"}}/>暑熱指数(WBGT)</span>
               <span style={{color:C.faint}}>※ 表示中スコープ（{scope==="in"?"会場内":"会場外"}）の最大値</span>
@@ -349,10 +349,10 @@ export default function CrowdWeather() {
             <Panel style={{padding:18}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
                 <Sliders size={15} color={C.cool}/><Eyebrow>Product 01 ── 主催者・警備会社向け</Eyebrow></div>
-              <div style={{fontWeight:600,fontSize:16,marginBottom:16}}>予報が、そのままシフトになる。</div>
+              <div style={{fontWeight:600,fontSize:15,marginBottom:16}}>予報が、そのままシフトになる。</div>
 
               <div style={{marginBottom:14}}>
-                <div style={{fontSize:12,color:C.muted,marginBottom:7}}>天候</div>
+                <div style={{fontSize:13,color:C.muted,marginBottom:7}}>天候</div>
                 <div style={{display:"flex",gap:8}}>
                   {[["sunny","晴"],["cloudy","曇"],["rainy","雨"]].map(([k,l])=>(
                     <button key={k} onClick={()=>set("weather",k)}
@@ -366,13 +366,13 @@ export default function CrowdWeather() {
               </div>
               <div style={{marginBottom:14}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
-                  <span style={{fontSize:12,color:C.muted}}>予想最高気温</span>
+                  <span style={{fontSize:13,color:C.muted}}>予想最高気温</span>
                   <span style={{fontFamily:mono,fontWeight:600,color:s.temp>=33?C.heat:C.mist}}>{s.temp}℃</span></div>
                 <input type="range" min={22} max={39} value={s.temp} onChange={e=>set("temp",+e.target.value)} style={{width:"100%"}}/>
               </div>
               <div style={{marginBottom:18}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
-                  <span style={{fontSize:12,color:C.muted}}>チケット販売数（来場規模の最重要変数）</span>
+                  <span style={{fontSize:13,color:C.muted}}>チケット販売数（来場規模の最重要変数）</span>
                   <span style={{fontFamily:mono,fontWeight:600}}>{s.tickets.toLocaleString()}</span></div>
                 <input type="range" min={5000} max={40000} step={1000} value={s.tickets} onChange={e=>set("tickets",+e.target.value)} style={{width:"100%"}}/>
               </div>
@@ -385,9 +385,9 @@ export default function CrowdWeather() {
                   {ic:<Train size={15} color={plan.outDanger?C.danger:C.safe}/>,k:"会場外・駅動線",v:plan.outDanger?"危険":"許容",sub:"開場前・終演後の詰まり",c:plan.outDanger?C.danger:C.safe},
                 ].map((m,i)=>(
                   <div key={i} style={{background:C.panel2,border:`1px solid ${C.line}`,borderRadius:12,padding:"11px 12px"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6,color:C.muted,fontSize:11}}>{m.ic}{m.k}</div>
-                    <div style={{fontFamily:mono,fontWeight:700,fontSize:22,color:m.c,marginTop:3}}>{m.v}</div>
-                    <div style={{fontFamily:mono,fontSize:10,color:C.faint}}>{m.sub}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,color:C.muted,fontSize:13}}>{m.ic}{m.k}</div>
+                    <div style={{fontFamily:mono,fontWeight:700,fontSize:19,color:m.c,marginTop:3}}>{m.v}</div>
+                    <div style={{fontFamily:mono,fontSize:13,color:C.faint}}>{m.sub}</div>
                   </div>
                 ))}
               </div>
@@ -406,20 +406,20 @@ export default function CrowdWeather() {
               <div style={{marginTop:14,background:C.panel2,border:`1px solid ${C.line}`,borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
                 <TrendingDown size={20} color={C.safe}/>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:12,color:C.muted}}>「厚く置く」→「賢く置く」（人時試算）</div>
+                  <div style={{fontSize:13,color:C.muted}}>「厚く置く」→「賢く置く」（人時試算）</div>
                   <div style={{fontFamily:mono,fontSize:13,marginTop:2}}>
                     <span style={{color:C.faint,textDecoration:"line-through"}}>{plan.baselinePH}人時</span>
                     <span style={{color:C.faint}}> → </span>
                     <span style={{color:C.mist,fontWeight:700}}>{plan.optimizedPH}人時</span>
                     <span style={{color:C.safe,fontWeight:700}}>（-{plan.saved}%）</span>
                   </div>
-                  <div style={{fontFamily:mono,fontSize:10,color:C.faint,marginTop:2}}>一律増員をやめ、ピーク時間帯・危険エリアに集中配置した場合</div>
+                  <div style={{fontFamily:mono,fontSize:13,color:C.faint,marginTop:2}}>一律増員をやめ、ピーク時間帯・危険エリアに集中配置した場合</div>
                 </div>
               </div>
 
               <button onClick={()=>setShowPlan(v=>!v)}
                 style={{marginTop:14,width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-                  padding:"12px 0",borderRadius:11,cursor:"pointer",fontWeight:700,fontSize:14,
+                  padding:"12px 0",borderRadius:11,cursor:"pointer",fontWeight:700,fontSize:15,
                   background:C.cool,color:C.ink,border:"none"}}>
                 <FileText size={17}/>{showPlan?"計画書を閉じる":"雑踏警備計画書＋配置図をワンクリック出力"}
               </button>
@@ -434,14 +434,14 @@ export default function CrowdWeather() {
                     <Sparkles size={15} color={C.violet}/>
                     <Eyebrow>AI OPERATIONS ADVISOR ── OrcaRouter</Eyebrow>
                   </div>
-                  <div style={{fontWeight:600,fontSize:16}}>現在の予報から、次の打ち手をAIに聞く。</div>
-                  <div style={{fontSize:11.5,color:C.muted,marginTop:5}}>
+                  <div style={{fontWeight:600,fontSize:15}}>現在の予報から、次の打ち手をAIに聞く。</div>
+                  <div style={{fontSize:13,color:C.muted,marginTop:5}}>
                     混雑・WBGT・日陰率・来場規模・時間帯を渡し、運営判断を短く提案します。
                   </div>
                 </div>
                 <button onClick={askOrca} disabled={aiLoading}
                   style={{display:"flex",alignItems:"center",gap:7,padding:"10px 14px",borderRadius:10,
-                    cursor:aiLoading?"wait":"pointer",fontWeight:700,fontSize:12,border:"none",
+                    cursor:aiLoading?"wait":"pointer",fontWeight:700,fontSize:13,border:"none",
                     background:C.violet,color:C.ink,opacity:aiLoading?0.65:1}}>
                   <Sparkles size={15}/>{aiLoading?"分析中…":"AIに運営判断を聞く"}
                 </button>
@@ -449,7 +449,7 @@ export default function CrowdWeather() {
 
               {aiAdvice && (
                 <div style={{marginTop:13,background:C.deep,border:`1px solid ${C.violet}55`,
-                  borderRadius:11,padding:"12px 14px",fontSize:12.5,lineHeight:1.75,whiteSpace:"pre-wrap"}}>
+                  borderRadius:11,padding:"12px 14px",fontSize:13,lineHeight:1.75,whiteSpace:"pre-wrap"}}>
                   {aiAdvice}
                 </div>
               )}
@@ -457,7 +457,7 @@ export default function CrowdWeather() {
               {/* ルーティングをブラックボックスにしない ── 審査項目⑥の実測値をそのまま出す */}
               {aiMeta && (
                 <div style={{marginTop:9,display:"flex",flexWrap:"wrap",gap:7,alignItems:"center",
-                  fontFamily:mono,fontSize:10.5,color:C.faint}}>
+                  fontFamily:mono,fontSize:13,color:C.faint}}>
                   <span>この提案を処理したモデル:</span>
                   <Chip c={C.violet}>{aiMeta.resolvedModel || aiMeta.servedModel || "unknown"}</Chip>
                   {aiMeta.router && <Chip c={C.cool}>router: {aiMeta.router}</Chip>}
@@ -480,20 +480,20 @@ export default function CrowdWeather() {
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
                     <MapPin size={15} color={C.cool}/><Eyebrow>{scope==="in"?"会場内予報 × 暑熱予報":"会場外予報 ── 駅動線・路地"}</Eyebrow></div>
-                  <div style={{fontWeight:600,fontSize:16}}>{hour}:00 の予測</div>
+                  <div style={{fontWeight:600,fontSize:15}}>{hour}:00 の予測</div>
                 </div>
                 <div style={{display:"flex",gap:8,alignItems:"center"}}>
                   <div style={{display:"flex",gap:4,background:C.panel2,border:`1px solid ${C.line}`,borderRadius:10,padding:3}}>
                     {[["in","会場内"],["out","会場外"]].map(([k,l])=>(
                       <button key={k} onClick={()=>setScope(k)}
-                        style={{padding:"6px 11px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,
+                        style={{padding:"6px 11px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,
                           background:scope===k?C.violet:"transparent",color:scope===k?C.ink:C.muted,border:"none"}}>{l}</button>
                     ))}
                   </div>
                   <div style={{display:"flex",gap:4,background:C.panel2,border:`1px solid ${C.line}`,borderRadius:10,padding:3}}>
                     {[["crowd","混雑"],["heat","暑熱/日陰"]].map(([k,l])=>(
                       <button key={k} onClick={()=>setLayer(k)}
-                        style={{padding:"6px 11px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,
+                        style={{padding:"6px 11px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,
                           background:layer===k?C.cool:"transparent",color:layer===k?C.ink:C.muted,border:"none"}}>{l}</button>
                     ))}
                   </div>
@@ -505,27 +505,27 @@ export default function CrowdWeather() {
               <div style={{display:"flex",alignItems:"center",gap:14,marginTop:12}}>
                 <SunArc hour={hour} weather={s.weather}/>
                 <div style={{flex:1}}>
-                  <div style={{display:"flex",justifyContent:"space-between",fontFamily:mono,fontSize:10,color:C.faint,marginBottom:6}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontFamily:mono,fontSize:13,color:C.faint,marginBottom:6}}>
                     <span>開場 {OPEN}:00</span><span>時間スクラバー</span><span>終演 {CLOSE}:00</span></div>
                   <input type="range" min={OPEN} max={CLOSE} value={hour} onChange={e=>setHour(+e.target.value)} style={{width:"100%"}}/>
                 </div>
               </div>
-              <div style={{fontFamily:mono,fontSize:10,color:C.faint,marginTop:6}}>
+              <div style={{fontFamily:mono,fontSize:13,color:C.faint,marginTop:6}}>
                 ☂ = その時間帯に日陰（3D都市モデルによる時間帯別日陰計算・デモ簡略版）。時間を動かすと日陰が東→西へ移る。
               </div>
 
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}>
                 <div style={{background:C.panel2,border:`1px solid ${densStyle(now.maxD).c}44`,borderRadius:11,padding:"10px 12px"}}>
-                  <div style={{fontSize:11,color:C.muted,display:"flex",gap:6,alignItems:"center"}}><Users size={13} color={densStyle(now.maxD).c}/>最混雑</div>
-                  <div style={{fontWeight:700,fontSize:14,marginTop:3,color:densStyle(now.maxD).c}}>{now.maxDZ.name}・{densStyle(now.maxD).label}</div>
+                  <div style={{fontSize:13,color:C.muted,display:"flex",gap:6,alignItems:"center"}}><Users size={13} color={densStyle(now.maxD).c}/>最混雑</div>
+                  <div style={{fontWeight:700,fontSize:15,marginTop:3,color:densStyle(now.maxD).c}}>{now.maxDZ.name}・{densStyle(now.maxD).label}</div>
                 </div>
                 <div style={{background:C.panel2,border:`1px solid ${heatStyle(now.maxW).c}44`,borderRadius:11,padding:"10px 12px"}}>
-                  <div style={{fontSize:11,color:C.muted,display:"flex",gap:6,alignItems:"center"}}><Thermometer size={13} color={heatStyle(now.maxW).c}/>最暑熱</div>
-                  <div style={{fontWeight:700,fontSize:14,marginTop:3,color:heatStyle(now.maxW).c}}>{now.maxWZ.name}・{heatStyle(now.maxW).label}</div>
+                  <div style={{fontSize:13,color:C.muted,display:"flex",gap:6,alignItems:"center"}}><Thermometer size={13} color={heatStyle(now.maxW).c}/>最暑熱</div>
+                  <div style={{fontWeight:700,fontSize:15,marginTop:3,color:heatStyle(now.maxW).c}}>{now.maxWZ.name}・{heatStyle(now.maxW).label}</div>
                 </div>
               </div>
               {scope==="out"&&(
-                <div style={{marginTop:10,fontFamily:mono,fontSize:11,color:C.muted,lineHeight:1.7,background:C.deep,border:`1px dashed ${C.line}`,borderRadius:10,padding:"10px 12px"}}>
+                <div style={{marginTop:10,fontFamily:mono,fontSize:13,color:C.muted,lineHeight:1.7,background:C.deep,border:`1px dashed ${C.line}`,borderRadius:10,padding:"10px 12px"}}>
                   会場外予報：開場前（{OPEN}:00）は駅→ゲートの流入、終演後（{CLOSE-1}:00〜）は路地・ホームへの逆流が詰まりの主因。
                   {plan.outDanger?" 本シナリオでは商店街の路地が危険密度に達するため、鉄道事業者・警察との退場連携を推奨。":" 本シナリオでは許容範囲。"}
                 </div>
@@ -537,7 +537,7 @@ export default function CrowdWeather() {
         {view==="app"&&<VisitorApp s={s} hour={hour} setHour={setHour} plan={plan}/>}
         {view==="data"&&<DataView/>}
 
-        <div style={{marginTop:22,display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",justifyContent:"space-between",fontFamily:mono,fontSize:11,color:C.faint}}>
+        <div style={{marginTop:22,display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",justifyContent:"space-between",fontFamily:mono,fontSize:13,color:C.faint}}>
           <span style={{display:"flex",alignItems:"center",gap:6}}><Shield size={13} color={C.faint}/>事故ゼロと、最高の体験は、両立できる。</span>
           <span>CROWD WEATHER ｜ AI HACK 2026 ｜ powered by OrcaRouter</span>
         </div>
@@ -556,10 +556,10 @@ function PlanDoc({ s, plan }) {
   return (
     <div style={{marginTop:14,background:C.deep,border:`1px dashed ${C.line}`,borderRadius:12,padding:16,fontFamily:mono}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <div style={{fontSize:12,fontWeight:700,color:C.mist}}>雑踏警備計画書（自動生成・抜粋）</div>
-        <div style={{fontSize:10,color:C.faint}}>DRAFT ／ 警察届出・社内稟議フォーマット準拠</div>
+        <div style={{fontSize:13,fontWeight:700,color:C.mist}}>雑踏警備計画書（自動生成・抜粋）</div>
+        <div style={{fontSize:13,color:C.faint}}>DRAFT ／ 警察届出・社内稟議フォーマット準拠</div>
       </div>
-      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
         <tbody style={{color:C.muted}}>
           {[
             ["予報シナリオ",`${wLabel}・${s.temp}℃ ／ 来場規模 ${s.tickets.toLocaleString()}`],
@@ -577,15 +577,15 @@ function PlanDoc({ s, plan }) {
         </tbody>
       </table>
       <div style={{marginTop:12}}>
-        <div style={{fontSize:11,color:C.faint,marginBottom:6}}>配置図（ピーク {plan.peakDH}:00 時点・自動生成）</div>
+        <div style={{fontSize:13,color:C.faint,marginBottom:6}}>配置図（ピーク {plan.peakDH}:00 時点・自動生成）</div>
         <ZoneMap zones={IN_ZONES} hour={plan.peakDH} s={s} layer="crowd" height={170} mini staff={dots}/>
-        <div style={{display:"flex",gap:12,marginTop:7,fontSize:10,color:C.faint}}>
+        <div style={{display:"flex",gap:12,marginTop:7,fontSize:13,color:C.faint}}>
           <span><i style={{display:"inline-block",width:9,height:9,borderRadius:99,background:C.cool,marginRight:4}}/>給水</span>
           <span><i style={{display:"inline-block",width:9,height:9,borderRadius:99,background:C.caution,marginRight:4}}/>誘導</span>
           <span><i style={{display:"inline-block",width:9,height:9,borderRadius:99,background:C.safe,marginRight:4}}/>救護</span>
         </div>
       </div>
-      <div style={{marginTop:10,fontSize:10,color:C.faint,display:"flex",alignItems:"center",gap:6}}>
+      <div style={{marginTop:10,fontSize:13,color:C.faint,display:"flex",alignItems:"center",gap:6}}>
         <ChevronRight size={12} color={C.faint}/>時間帯別シフト表・PDF出力に対応（本デモは抜粋）。実データ学習で会場ごとに最適化。
       </div>
     </div>
@@ -610,13 +610,13 @@ export function VisitorApp({ s, hour, setHour, plan }) {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",borderBottom:`1px solid ${C.line}`}}>
             <div style={{display:"flex",alignItems:"center",gap:7}}>
               <Cloud size={17} color={C.cool}/><span style={{fontWeight:700,fontSize:13}}>CROWD WEATHER</span></div>
-            <div style={{fontFamily:mono,fontSize:12,color:C.muted}}>{hour}:00 ・ <WeatherIcon w={s.weather} size={12} color={C.muted}/> {s.temp}℃</div>
+            <div style={{fontFamily:mono,fontSize:13,color:C.muted}}>{hour}:00 ・ <WeatherIcon w={s.weather} size={12} color={C.muted}/> {s.temp}℃</div>
           </div>
           {/* push alert */}
           {alertOn&&(
             <div style={{margin:"12px 14px 0",background:C.danger+"1A",border:`1px solid ${C.danger}55`,borderRadius:12,padding:"10px 12px",display:"flex",gap:9}}>
               <Bell size={15} color={C.danger} style={{flexShrink:0,marginTop:1}}/>
-              <div style={{fontSize:11.5,lineHeight:1.55,color:C.mist}}>
+              <div style={{fontSize:13,lineHeight:1.55,color:C.mist}}>
                 {inStats.maxD>=75?`${plan.peakDH}:00 頃 ${plan.peakDZ.name}周辺が危険密度の予報。`:""}
                 {inStats.maxW>=31?`現在 ${inStats.maxWZ.name}は暑熱危険。日陰側へ。`:""}
                 <span style={{color:C.cool}}> 空いているルートを見る →</span>
@@ -628,47 +628,47 @@ export function VisitorApp({ s, hour, setHour, plan }) {
             {[["nav","分散ナビ",<Navigation key="n" size={13}/>],["shade","日陰ルート",<Umbrella key="s" size={13}/>],["help","こまりごと",<LifeBuoy key="h" size={13}/>]].map(([k,l,ic])=>(
               <button key={k} onClick={()=>setTab(k)}
                 style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"8px 0",
-                  borderRadius:9,cursor:"pointer",fontSize:11.5,fontWeight:600,border:"none",
+                  borderRadius:9,cursor:"pointer",fontSize:13,fontWeight:600,border:"none",
                   background:tab===k?C.cool:C.panel2,color:tab===k?C.ink:C.muted}}>{ic}{l}</button>
             ))}
           </div>
           {/* body */}
           <div style={{padding:14}}>
             {tab==="nav"&&(<>
-              <div style={{fontSize:12.5,fontWeight:700,marginBottom:9}}>ピークそのものを、崩す。</div>
+              <div style={{fontSize:13,fontWeight:700,marginBottom:9}}>ピークそのものを、崩す。</div>
               <div style={{background:C.panel2,border:`1px solid ${C.line}`,borderRadius:12,padding:12,marginBottom:9}}>
-                <div style={{fontSize:11,color:C.muted}}>いま入場するなら</div>
+                <div style={{fontSize:13,color:C.muted}}>いま入場するなら</div>
                 <div style={{fontWeight:700,fontSize:15,marginTop:2}}>{advice.nowBest.g.name} <span style={{fontFamily:mono,color:densStyle(density(advice.nowBest.g,hour,s)).c}}>約{advice.nowBest.wait}分待ち</span></div>
               </div>
               {advice.shift&&advice.shift.wait<advice.nowBest.wait-4&&(
                 <div style={{background:C.safe+"14",border:`1px solid ${C.safe}44`,borderRadius:12,padding:12,marginBottom:9}}>
-                  <div style={{fontSize:11,color:C.safe,fontWeight:700}}>おすすめ：時間をずらす</div>
-                  <div style={{fontSize:12.5,marginTop:3,lineHeight:1.6}}>{advice.shift.h}:00 の{advice.shift.g.name}なら <b style={{fontFamily:mono}}>約{advice.shift.wait}分</b>。それまで駅ナカで涼しく待つのが正解。</div>
+                  <div style={{fontSize:13,color:C.safe,fontWeight:700}}>おすすめ：時間をずらす</div>
+                  <div style={{fontSize:13,marginTop:3,lineHeight:1.6}}>{advice.shift.h}:00 の{advice.shift.g.name}なら <b style={{fontFamily:mono}}>約{advice.shift.wait}分</b>。それまで駅ナカで涼しく待つのが正解。</div>
                 </div>
               )}
-              <div style={{fontFamily:mono,fontSize:10.5,color:C.faint,lineHeight:1.7}}>帰路：{CLOSE-1}:00〜 は駅ホームが最混雑。終演15分前退場 or 30分の余韻で回避。GPSログは匿名化のうえ予報精度向上に利用。</div>
+              <div style={{fontFamily:mono,fontSize:13,color:C.faint,lineHeight:1.7}}>帰路：{CLOSE-1}:00〜 は駅ホームが最混雑。終演15分前退場 or 30分の余韻で回避。GPSログは匿名化のうえ予報精度向上に利用。</div>
             </>)}
             {tab==="shade"&&(<>
-              <div style={{fontSize:12.5,fontWeight:700,marginBottom:9}}>待つなら、涼しい側で。</div>
+              <div style={{fontSize:13,fontWeight:700,marginBottom:9}}>待つなら、涼しい側で。</div>
               <ZoneMap zones={IN_ZONES} hour={hour} s={s} layer="heat" height={165} mini highlightShade/>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:9}}>
-                <div style={{fontFamily:mono,fontSize:11,color:C.muted}}>現在の日陰カバー率 <b style={{color:C.cool}}>{shadeRate}%</b></div>
-                <div style={{fontFamily:mono,fontSize:10,color:C.faint}}>☂ = 日陰</div>
+                <div style={{fontFamily:mono,fontSize:13,color:C.muted}}>現在の日陰カバー率 <b style={{color:C.cool}}>{shadeRate}%</b></div>
+                <div style={{fontFamily:mono,fontSize:13,color:C.faint}}>☂ = 日陰</div>
               </div>
-              <div style={{background:C.panel2,border:`1px solid ${C.line}`,borderRadius:12,padding:11,marginTop:9,fontSize:12,lineHeight:1.65}}>
+              <div style={{background:C.panel2,border:`1px solid ${C.line}`,borderRadius:12,padding:11,marginTop:9,fontSize:13,lineHeight:1.65}}>
                 {hour<=13?"午前は東側建物の影。物販の列は東ゲート側から並ぶのが涼しい。":hour<16?"日陰が最少の時間帯。屋内サブステージ・救護所を退避先に。":"夕方は西側に影が伸びる。西ゲート・フードコート側が涼しい。"}
               </div>
             </>)}
             {tab==="help"&&(<>
-              <div style={{fontSize:12.5,fontWeight:700,marginBottom:9}}>要配慮者を、先に守る。</div>
+              <div style={{fontSize:13,fontWeight:700,marginBottom:9}}>要配慮者を、先に守る。</div>
               {[
                 {ic:<Droplets size={15} color={C.cool}/>,t:"給水所",d:`救護・給水エリアまで徒歩3分。現在の混雑 ${aidD}（${densStyle(aidD).label}）`},
                 {ic:<LifeBuoy size={15} color={C.safe}/>,t:"救護所",d:"体調不良の予兆段階で案内。スタッフ側にも同時通知され、先回りで動ける。"},
                 {ic:<Users size={15} color={C.violet}/>,t:"ベビーカー優先動線",d:"段差なし・日陰率の高いルートを常時表示。混雑ピーク時は専用退場口へ。"},
               ].map((f,i)=>(
                 <div key={i} style={{background:C.panel2,border:`1px solid ${C.line}`,borderRadius:12,padding:11,marginBottom:8}}>
-                  <div style={{display:"flex",alignItems:"center",gap:7,fontWeight:700,fontSize:12.5}}>{f.ic}{f.t}</div>
-                  <div style={{fontSize:11.5,color:C.muted,marginTop:4,lineHeight:1.6}}>{f.d}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:7,fontWeight:700,fontSize:13}}>{f.ic}{f.t}</div>
+                  <div style={{fontSize:13,color:C.muted,marginTop:4,lineHeight:1.6}}>{f.d}</div>
                 </div>
               ))}
             </>)}
@@ -679,15 +679,15 @@ export function VisitorApp({ s, hour, setHour, plan }) {
       <Panel style={{padding:18,alignSelf:"start"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
           <Smartphone size={15} color={C.cool}/><Eyebrow>Product 02 ── 来場者アプリ（無料）</Eyebrow></div>
-        <div style={{fontWeight:600,fontSize:16,marginBottom:12}}>いちばん暑い場所に、いちばん困っている人がいる。</div>
+        <div style={{fontWeight:600,fontSize:15,marginBottom:12}}>いちばん暑い場所に、いちばん困っている人がいる。</div>
         <div style={{fontSize:13,color:C.muted,lineHeight:1.8,marginBottom:14}}>
           来場者アプリは無料。天気予報を見て傘をさすように、混雑予報を見て入場時間とルートを変える——その行動変容そのものがピークを崩し、事故リスクを下げる。利用ログは実測データとして予報精度を押し上げ、導入イベントが増えるほど強くなる。
         </div>
-        <div style={{fontFamily:mono,fontSize:11,color:C.faint,marginBottom:10}}>時間を動かして、提案の変化を確認：</div>
+        <div style={{fontFamily:mono,fontSize:13,color:C.faint,marginBottom:10}}>時間を動かして、提案の変化を確認：</div>
         <input type="range" min={OPEN} max={CLOSE} value={hour} onChange={e=>setHour(+e.target.value)} style={{width:"100%"}}/>
-        <div style={{display:"flex",justifyContent:"space-between",fontFamily:mono,fontSize:10,color:C.faint,marginTop:5}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontFamily:mono,fontSize:13,color:C.faint,marginTop:5}}>
           <span>{OPEN}:00</span><span style={{color:C.cool}}>{hour}:00</span><span>{CLOSE}:00</span></div>
-        <div style={{marginTop:14,background:C.deep,border:`1px dashed ${C.line}`,borderRadius:11,padding:"11px 13px",fontFamily:mono,fontSize:11,color:C.muted,lineHeight:1.7}}>
+        <div style={{marginTop:14,background:C.deep,border:`1px dashed ${C.line}`,borderRadius:11,padding:"11px 13px",fontFamily:mono,fontSize:13,color:C.muted,lineHeight:1.7}}>
           主催者コンソールと同じ予測モデルに連動。運営の打ち手（供給側）と来場者の行動（需要側）を、ひとつの予報で同時に動かす。
         </div>
       </Panel>
@@ -712,11 +712,11 @@ export function DataView() {
     {n:"カメラ人流センシング",src:"自社センシング",feeds:["混雑","暑熱"]},
     {n:"来場者アプリ利用ログ",src:"CROWD WEATHER",feeds:["混雑","暑熱"],note:"予報精度を押し上げる実測"},
   ];
-  const Feed=({f})=><span style={{fontFamily:mono,fontSize:10,color:f==="混雑"?C.busy:C.heat,background:(f==="混雑"?C.busy:C.heat)+"1A",border:`1px solid ${(f==="混雑"?C.busy:C.heat)}44`,borderRadius:99,padding:"2px 8px"}}>→{f}予測</span>;
+  const Feed=({f})=><span style={{fontFamily:mono,fontSize:13,color:f==="混雑"?C.busy:C.heat,background:(f==="混雑"?C.busy:C.heat)+"1A",border:`1px solid ${(f==="混雑"?C.busy:C.heat)}44`,borderRadius:99,padding:"2px 8px"}}>→{f}予測</span>;
   const Card=({d})=>(
     <div style={{background:C.panel2,border:`1px solid ${C.line}`,borderRadius:12,padding:"12px 14px"}}>
       <div style={{fontWeight:700,fontSize:13}}>{d.n}</div>
-      <div style={{fontFamily:mono,fontSize:10.5,color:C.faint,margin:"3px 0 7px"}}>{d.src}{d.note?` ── ${d.note}`:""}</div>
+      <div style={{fontFamily:mono,fontSize:13,color:C.faint,margin:"3px 0 7px"}}>{d.src}{d.note?` ── ${d.note}`:""}</div>
       <div style={{display:"flex",gap:6}}>{d.feeds.map(f=><Feed key={f} f={f}/>)}</div>
     </div>
   );
@@ -725,20 +725,20 @@ export function DataView() {
       <Panel style={{padding:18}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
           <Database size={15} color={C.cool}/><Eyebrow>東京都オープンデータ 等</Eyebrow></div>
-        <div style={{fontWeight:600,fontSize:16,marginBottom:14}}>誰でも使える「土台」</div>
+        <div style={{fontWeight:600,fontSize:15,marginBottom:14}}>誰でも使える「土台」</div>
         <div style={{display:"grid",gap:10}}>{open.map((d,i)=><Card key={i} d={d}/>)}</div>
-        <div style={{marginTop:12,fontFamily:mono,fontSize:10.5,color:C.faint,lineHeight:1.7}}>
+        <div style={{marginTop:12,fontFamily:mono,fontSize:13,color:C.faint,lineHeight:1.7}}>
           ※ 3D都市モデルの活用は、2024年度都知事杯受賞作「高解像度熱中症リスクマップ」の系譜。本デモの日陰計算はその簡略版。
         </div>
       </Panel>
       <Panel style={{padding:18}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
           <Zap size={15} color={C.caution}/><Eyebrow>民間 × 自社データ</Eyebrow></div>
-        <div style={{fontWeight:600,fontSize:16,marginBottom:14}}>私たちしか持ち込めない「差」</div>
+        <div style={{fontWeight:600,fontSize:15,marginBottom:14}}>私たちしか持ち込めない「差」</div>
         <div style={{display:"grid",gap:10}}>{priv.map((d,i)=><Card key={i} d={d}/>)}</div>
         <div style={{marginTop:12,background:C.deep,border:`1px dashed ${C.line}`,borderRadius:11,padding:"11px 13px",display:"flex",gap:9}}>
           <Lock size={14} color={C.caution} style={{flexShrink:0,marginTop:2}}/>
-          <div style={{fontSize:12,color:C.muted,lineHeight:1.7}}>
+          <div style={{fontSize:13,color:C.muted,lineHeight:1.7}}>
             民間イベントデータは、主催者との信頼関係がなければ集まらない。イベント制作の当事者である私たち自身が「データの持ち込み手」——ここが最大の参入障壁になる。
           </div>
         </div>

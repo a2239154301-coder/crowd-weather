@@ -68,14 +68,14 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
         }}
       >
         <div>
-          <div className="cw-mono" style={{ fontSize: 11, letterSpacing: 1.5, color: INK.textFaint }}>
+          <div className="cw-mono" style={{ fontSize: 13, letterSpacing: 1.5, color: INK.textFaint }}>
             ZONE TIMELINE ── ゾーン別 日陰率 × WBGT
           </div>
           <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>ここが、いつ、危険になるか</div>
         </div>
         <div
           className="cw-mono"
-          style={{ display: "flex", gap: 12, fontSize: 10, color: INK.textFaint, flexWrap: "wrap" }}
+          style={{ display: "flex", gap: 12, fontSize: 13, color: INK.textFaint, flexWrap: "wrap" }}
         >
           {WBGT_BANDS.map((b) => (
             <span key={b.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -104,7 +104,7 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
                 key={h}
                 className="cw-mono"
                 style={{
-                  fontSize: 10,
+                  fontSize: 13,
                   color: h === hour ? INK.accent : INK.textFaint,
                   textAlign: "center",
                   fontWeight: h === hour ? 700 : 400,
@@ -127,7 +127,7 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
             >
               <div
                 style={{
-                  fontSize: 11.5,
+                  fontSize: 13,
                   color: INK.textDim,
                   paddingLeft: 4,
                   display: "flex",

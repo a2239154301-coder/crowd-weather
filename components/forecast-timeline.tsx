@@ -82,13 +82,13 @@ export default function ForecastTimeline({ zones, scenario, hour, onHourChange }
             cursor: "pointer",
           }}
         >
-          <span aria-hidden style={{ fontSize: 11 }}>{playing ? "■" : "▶"}</span>
+          <span aria-hidden style={{ fontSize: 13 }}>{playing ? "■" : "▶"}</span>
           {playing ? "停止" : "一日を再生"}
         </button>
-        <div style={{ fontSize: 12.5, color: INK.textDim }}>
+        <div style={{ fontSize: 13, color: INK.textDim }}>
           「今を見る」から<span style={{ color: INK.text, fontWeight: 600 }}>「先を読む」</span>へ
         </div>
-        <div className="cw-mono" style={{ marginLeft: "auto", fontSize: 11, color: INK.textFaint }}>
+        <div className="cw-mono" style={{ marginLeft: "auto", fontSize: 13, color: INK.textFaint }}>
           開場 {VENUE.open}:00 — 終演 {VENUE.close}:00
         </div>
       </div>
@@ -123,7 +123,7 @@ export default function ForecastTimeline({ zones, scenario, hour, onHourChange }
               style={{
                 flex: 1,
                 textAlign: "center",
-                fontSize: 11,
+                fontSize: 13,
                 paddingTop: 5,
                 color: h === hour ? INK.accent : INK.textFaint,
                 fontWeight: h === hour ? 700 : 400,
@@ -140,7 +140,7 @@ export default function ForecastTimeline({ zones, scenario, hour, onHourChange }
 
 function RowLabel({ text }: { text: string }) {
   return (
-    <div style={{ fontSize: 12, color: INK.textDim, textAlign: "right", paddingRight: 2 }}>{text}</div>
+    <div style={{ fontSize: 13, color: INK.textDim, textAlign: "right", paddingRight: 2 }}>{text}</div>
   );
 }
 
@@ -202,7 +202,7 @@ function BarRow({
                 style={{
                   position: "absolute",
                   top: -3,
-                  fontSize: 10,
+                  fontSize: 13,
                   color: INK.text,
                   textShadow: `0 0 5px ${INK.page}`,
                   pointerEvents: "none",

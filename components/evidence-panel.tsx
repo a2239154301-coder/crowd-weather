@@ -36,14 +36,14 @@ export default function EvidencePanel() {
             </ul>
           </div>
         </div>
-        <div style={{ marginTop: 10, fontSize: 12.5, color: INK.textDim }}>
+        <div style={{ marginTop: 10, fontSize: 13, color: INK.textDim }}>
           較正定数（指数100 = 何人/m²）: 滞留系 {INDEX100_PERSONS_PER_SQM.queue} ／ 屋内系 {INDEX100_PERSONS_PER_SQM.indoor} ／ 通路系 {INDEX100_PERSONS_PER_SQM.corridor}
         </div>
       </section>
 
       <section style={card}>
         <h2 style={h2}>出典（信頼度を3段階で表記）</h2>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr>
               {["主張", "値", "信頼度", "出典"].map((h) => (
@@ -66,7 +66,7 @@ export default function EvidencePanel() {
 
       <section style={card}>
         <h2 style={h2}>データの段階（T0〜T3）と画面の対応</h2>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr>
               {["段", "データ", "今の実装", "使う画面"].map((h) => (
@@ -89,7 +89,7 @@ export default function EvidencePanel() {
             ))}
           </tbody>
         </table>
-        <p style={{ margin: "10px 0 0", fontSize: 12.5, color: INK.textDim, lineHeight: 1.8 }}>
+        <p style={{ margin: "10px 0 0", fontSize: 13, color: INK.textDim, lineHeight: 1.8 }}>
           段が進むほど鮮度が高く、信頼度の重みも大きい（カメラ &gt; ボタン報告 &gt; 自由文 &gt; 写真）。
           統合は決定的計算（ナウキャスト）で行い、LLMは自由文・写真の構造化にだけ使う。
         </p>
@@ -105,14 +105,14 @@ const card: React.CSSProperties = {
   padding: 18,
 };
 
-const h2: React.CSSProperties = { margin: "0 0 12px", fontSize: 16, fontWeight: 700 };
+const h2: React.CSSProperties = { margin: "0 0 12px", fontSize: 15, fontWeight: 700 };
 
-const ul: React.CSSProperties = { margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.9, color: INK.textDim };
+const ul: React.CSSProperties = { margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.9, color: INK.textDim };
 
 const th: React.CSSProperties = {
   textAlign: "left",
   padding: "6px 9px",
-  fontSize: 11.5,
+  fontSize: 13,
   color: INK.textFaint,
   borderBottom: `1px solid ${INK.line}`,
   fontWeight: 600,

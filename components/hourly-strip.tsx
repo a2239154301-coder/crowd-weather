@@ -77,7 +77,7 @@ export default function HourlyStrip({ zones, scenario, hour, onHourChange, scope
         }}
       >
         <div>
-          <div className="cw-mono" style={{ fontSize: 11, letterSpacing: 1.5, color: INK.textFaint }}>
+          <div className="cw-mono" style={{ fontSize: 13, letterSpacing: 1.5, color: INK.textFaint }}>
             HOURLY FORECAST ── 時間帯別予報
           </div>
           <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>
@@ -102,10 +102,10 @@ export default function HourlyStrip({ zones, scenario, hour, onHourChange, scope
               cursor: "pointer",
             }}
           >
-            <span aria-hidden style={{ fontSize: 11 }}>{playing ? "■" : "▶"}</span>
+            <span aria-hidden style={{ fontSize: 13 }}>{playing ? "■" : "▶"}</span>
             {playing ? "停止" : "一日を再生"}
           </button>
-          <span className="cw-mono" style={{ fontSize: 11, color: INK.textFaint }}>
+          <span className="cw-mono" style={{ fontSize: 13, color: INK.textFaint }}>
             クリックで会場図に反映 ↓
           </span>
         </div>
@@ -165,7 +165,7 @@ export default function HourlyStrip({ zones, scenario, hour, onHourChange, scope
                   }}
                 />
               </div>
-              <div className="cw-mono" style={{ fontSize: 11, marginTop: 5, color: ds.color }}>
+              <div className="cw-mono" style={{ fontSize: 13, marginTop: 5, color: ds.color }}>
                 {p.maxDensity}
               </div>
             </button>
@@ -175,7 +175,7 @@ export default function HourlyStrip({ zones, scenario, hour, onHourChange, scope
 
       <div
         className="cw-mono"
-        style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 10, color: INK.textFaint, flexWrap: "wrap" }}
+        style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 13, color: INK.textFaint, flexWrap: "wrap" }}
       >
         <LegendKey color="#FB7A1E" label="混雑指数" />
         <LegendKey color="#EF4444" label="暑熱指数(WBGT)" />
