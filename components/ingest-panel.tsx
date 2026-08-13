@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { DAY } from "@/lib/ui/day-theme";
+import { useTheme } from "@/lib/ui/theme";
 import { VENUE_CANVAS, type IngestedVenue, type IngestIssue } from "@/lib/ai/ingest-schema";
 import type { Point, ZoneKind } from "@/lib/forecast/types";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
@@ -112,6 +112,7 @@ async function shrinkImage(file: File): Promise<{ blob: Blob; info: ResizeInfo; 
 }
 
 export default function IngestPanel() {
+  const { T, sem } = useTheme();
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState("");
@@ -193,9 +194,9 @@ export default function IngestPanel() {
     minHeight: 44,
     padding: "10px 18px",
     borderRadius: 999,
-    border: `1px solid ${primary ? DAY.accent : DAY.line}`,
-    background: primary && !busy ? DAY.accent : "transparent",
-    color: primary ? (busy ? DAY.accent : DAY.page) : DAY.textDim,
+    border: `1px solid ${primary ? T.accent : T.line}`,
+    background: primary && !busy ? T.accent : "transparent",
+    color: primary ? (busy ? T.accent : T.page) : T.textDim,
     fontWeight: primary ? 700 : 600,
     fontSize: 13,
     cursor: busy ? "wait" : "pointer",
@@ -206,19 +207,19 @@ export default function IngestPanel() {
       {/* ── 説明と入口 ─────────────────────────────── */}
       <div
         style={{
-          background: DAY.surface,
-          border: `1px solid ${DAY.line}`,
+          background: T.surface,
+          border: `1px solid ${T.line}`,
           borderRadius: 12,
           padding: 16,
         }}
       >
-        <div style={{ fontSize: 13, letterSpacing: 1.5, color: DAY.textFaint }}>
+        <div style={{ fontSize: 13, letterSpacing: 1.5, color: T.textFaint }}>
           VENUE INGEST — OrcaRouter Vision + Structured Outputs
         </div>
         <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>
           会場資料を、予報が読める地図に変換する。
         </div>
-        <div style={{ fontSize: 13, color: DAY.textDim, marginTop: 5, lineHeight: 1.7 }}>
+        <div style={{ fontSize: 13, color: T.textDim, marginTop: 5, lineHeight: 1.7 }}>
           航空写真・会場図面を投げると、ゾーン（人が滞留する場所）と構造物（影を落とすもの）を
           読み取って構造化する。会場ごとに<b>1回きり</b>の処理。様式がバラバラな会場資料を
           ルールベースで読むことはできない — ここがLLMでないと成立しない中核。
@@ -237,15 +238,15 @@ export default function IngestPanel() {
           }}
           style={{
             marginTop: 13,
-            border: `2px dashed ${dragOver ? DAY.accent : DAY.line}`,
+            border: `2px dashed ${dragOver ? T.accent : T.line}`,
             // アルファ連結の再調整（§1-3 パターン2）: 暗色地の1A(10%)は白地でほぼ消えるため26(15%)へ
-            background: dragOver ? `${DAY.accent}26` : DAY.raised,
+            background: dragOver ? `${T.accent}26` : T.raised,
             borderRadius: 12,
             padding: "26px 16px",
             textAlign: "center",
           }}
         >
-          <div style={{ fontSize: 13, color: DAY.textDim }}>
+          <div style={{ fontSize: 13, color: T.textDim }}>
             ここに画像をドロップ（PNG / JPEG / WebP）
           </div>
           <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
@@ -257,11 +258,11 @@ export default function IngestPanel() {
             </button>
           </div>
           {initial && (
-            <div style={{ marginTop: 10, fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
-              手元に会場図が無ければ、<b style={{ color: DAY.text }}>サンプル会場で試す</b>で動きを確認できます。
+            <div style={{ marginTop: 10, fontSize: 13, color: T.textDim, lineHeight: 1.7 }}>
+              手元に会場図が無ければ、<b style={{ color: T.text }}>サンプル会場で試す</b>で動きを確認できます。
             </div>
           )}
-          <div style={{ marginTop: 10, fontSize: 13, color: DAY.textFaint }}>
+          <div style={{ marginTop: 10, fontSize: 13, color: T.textFaint }}>
             ブラウザ内で長辺{RESIZE_LONG_EDGE}pxへ縮小した縮小版のみサーバーへ送信（元解像度の画像は送らない）
           </div>
           <input
@@ -283,11 +284,11 @@ export default function IngestPanel() {
               display: "flex",
               alignItems: "baseline",
               gap: 10,
-              color: DAY.textDim,
+              color: T.textDim,
               fontSize: 13,
             }}
           >
-            <span className="cw-mono" style={{ fontSize: 19, fontWeight: 700, color: DAY.accent }}>
+            <span className="cw-mono" style={{ fontSize: 19, fontWeight: 700, color: T.accent }}>
               {elapsed}秒
             </span>
             <span>読解中… 通常10秒前後。混雑時はフォールバックを含め最大50秒ほどかかります</span>
@@ -300,11 +301,11 @@ export default function IngestPanel() {
               marginTop: 12,
               padding: "11px 13px",
               borderRadius: 10,
-              border: "1px solid #B3123A55",
-              background: "#B3123A14",
+              border: `1px solid ${T.danger}55`,
+              background: `${T.danger}14`,
               // §5-2b: 暗色地用の淡い赤 #FCA5A5 は白地で1.69:1・判読不能だったため
-              // DAY.danger(#B3123A・白地6.85:1)へ差し替え
-              color: DAY.danger,
+              // DAY.danger(#B3123A・白地6.85:1)へ差し替え。テーマ切替でNIGHT.danger(#FCA5A5)にも追従
+              color: T.danger,
               fontSize: 13,
               lineHeight: 1.7,
             }}
@@ -320,8 +321,8 @@ export default function IngestPanel() {
           {/* 読み取り結果を写真に重ねる（本命の絵） */}
           <section
             style={{
-              background: DAY.surface,
-              border: `1px solid ${DAY.line}`,
+              background: T.surface,
+              border: `1px solid ${T.line}`,
               borderRadius: 12,
               padding: 12,
             }}
@@ -390,7 +391,7 @@ export default function IngestPanel() {
                 })}
               </svg>
             </div>
-            <div style={{ marginTop: 8, fontSize: 13, color: DAY.textFaint, lineHeight: 1.6 }}>
+            <div style={{ marginTop: 8, fontSize: 13, color: T.textFaint, lineHeight: 1.6 }}>
               読み取ったゾーン（色つき）と構造物（破線）を元画像に重ねて表示。
               位置は人が補正する前提の初期案。
             </div>
@@ -415,8 +416,8 @@ export default function IngestPanel() {
                 </Chip>
               </div>
               {result.venue.notes && (
-                <p style={{ margin: "10px 0 0", fontSize: 13, lineHeight: 1.8, color: DAY.textDim }}>
-                  <b style={{ color: DAY.text }}>AIからの申し送り:</b> {result.venue.notes}
+                <p style={{ margin: "10px 0 0", fontSize: 13, lineHeight: 1.8, color: T.textDim }}>
+                  <b style={{ color: T.text }}>AIからの申し送り:</b> {result.venue.notes}
                 </p>
               )}
             </ResultCard>
@@ -431,8 +432,9 @@ export default function IngestPanel() {
                         fontSize: 13,
                         lineHeight: 1.6,
                         // §5-2b: 暗色地用の淡色（#FCA5A5・#FDBA74）は白地で1.7:1前後・判読不能だったため、
-                        // DAY.danger(6.85:1)と #B45309（evidence-panel.tsxの二次資料色・白地5.02:1）へ差し替え
-                        color: it.level === "error" ? DAY.danger : "#B45309",
+                        // DAY.danger(6.85:1)と #B45309（evidence-panel.tsxの二次資料色・白地5.02:1）へ差し替え。
+                        // 段階色（注意）はテーマ切替に追従させるため sem.caution 経由に統一
+                        color: it.level === "error" ? T.danger : sem.caution,
                       }}
                     >
                       {it.message}
@@ -457,7 +459,7 @@ export default function IngestPanel() {
                 <Chip color="#86EFAC">{formatYen(costYenForMeta(result.meta))}</Chip>
               </div>
               {resize && (
-                <div className="cw-mono" style={{ marginTop: 9, fontSize: 13, color: DAY.textFaint, lineHeight: 1.7 }}>
+                <div className="cw-mono" style={{ marginTop: 9, fontSize: 13, color: T.textFaint, lineHeight: 1.7 }}>
                   送信前縮小: {Math.round(resize.fromW)}×{Math.round(resize.fromH)} {fmtKB(resize.fromKB)} →{" "}
                   {resize.toW}×{resize.toH} {fmtKB(resize.toKB)}
                 </div>
@@ -484,11 +486,12 @@ function centroid(poly: Point[]): Point {
 }
 
 function ResultCard({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+  const { T } = useTheme();
   return (
-    <div style={{ background: DAY.surface, border: `1px solid ${DAY.line}`, borderRadius: 12, padding: 15 }}>
+    <div style={{ background: T.surface, border: `1px solid ${T.line}`, borderRadius: 12, padding: 15 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, letterSpacing: 0.4 }}>{title}</h2>
-        {note && <span style={{ fontSize: 13, color: DAY.textFaint }}>{note}</span>}
+        {note && <span style={{ fontSize: 13, color: T.textFaint }}>{note}</span>}
       </div>
       {children}
     </div>
@@ -499,16 +502,17 @@ function ResultCard({ title, note, children }: { title: string; note?: string; c
  * カラーコード付きラベルチップ。呼び出し側は暗色地向けの生hex（#7DD3FC等）を渡しているが、
  * それを文字色にそのまま使うと白地で軒並み4.5:1未満になる（§5-2b）。
  * 段階色は塗り・点にだけ使い文字は墨色、という規約（day-theme.ts冒頭）に合わせ、
- * 文字は常に DAY.text、渡された色は背景の淡い塗りと縁取りだけに使う。
+ * 文字は常にテーマの text、渡された色は背景の淡い塗りと縁取りだけに使う。
  * §1-3 パターン2: 背景アルファを 1A(10%) → 26(15%) へ引き上げ（白地で消えるのを防ぐ）。
  */
 function Chip({ color, children }: { color: string; children: React.ReactNode }) {
+  const { T } = useTheme();
   return (
     <span
       style={{
         fontSize: 13,
         fontWeight: 600,
-        color: DAY.text,
+        color: T.text,
         background: `${color}26`,
         border: `1px solid ${color}66`,
         borderRadius: 999,

@@ -5,7 +5,7 @@ import type { Scenario, Zone } from "@/lib/forecast/types";
 import { VENUE } from "@/lib/forecast/venue";
 import { forecastZones } from "@/lib/forecast/model";
 import { WBGT_BANDS, wbgtBand } from "@/lib/forecast/scales";
-import { DAY } from "@/lib/ui/day-theme";
+import { useTheme } from "@/lib/ui/theme";
 
 /**
  * ゾーン別 危険度タイムライン（馬場v4の Zone Timeline を移植・復活）。
@@ -30,6 +30,7 @@ type Props = {
 const CELL_H = 26;
 
 export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Props) {
+  const { T } = useTheme();
   const hours = useMemo(
     () => Array.from({ length: VENUE.close - VENUE.open + 1 }, (_, i) => VENUE.open + i),
     []
@@ -53,8 +54,8 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
   return (
     <section
       style={{
-        background: DAY.surface,
-        border: `1px solid ${DAY.line}`,
+        background: T.surface,
+        border: `1px solid ${T.line}`,
         borderRadius: 14,
         padding: 16,
       }}
@@ -71,14 +72,14 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
         }}
       >
         <div>
-          <div className="cw-mono" style={{ fontSize: 13, letterSpacing: 1.5, color: DAY.textFaint }}>
+          <div className="cw-mono" style={{ fontSize: 13, letterSpacing: 1.5, color: T.textFaint }}>
             ZONE TIMELINE ── ゾーン別 日陰率 × WBGT
           </div>
           <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>どこが、いつ、危険になるか</div>
         </div>
         <div
           className="cw-mono"
-          style={{ display: "flex", gap: 12, fontSize: 13, color: DAY.textFaint, flexWrap: "wrap" }}
+          style={{ display: "flex", gap: 12, fontSize: 13, color: T.textFaint, flexWrap: "wrap" }}
         >
           {WBGT_BANDS.map((b) => (
             <span key={b.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -108,7 +109,7 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
                 className="cw-mono"
                 style={{
                   fontSize: 13,
-                  color: h === hour ? DAY.accent : DAY.textFaint,
+                  color: h === hour ? T.accent : T.textFaint,
                   textAlign: "center",
                   fontWeight: h === hour ? 700 : 400,
                 }}
@@ -131,7 +132,7 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
               <div
                 style={{
                   fontSize: 13,
-                  color: DAY.textDim,
+                  color: T.textDim,
                   paddingLeft: 4,
                   display: "flex",
                   alignItems: "center",
@@ -160,7 +161,7 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
                       position: "relative",
                       padding: 0,
                       cursor: "pointer",
-                      outline: h === hour ? `1.5px solid ${DAY.accent}` : "none",
+                      outline: h === hour ? `1.5px solid ${T.accent}` : "none",
                       overflow: "hidden",
                     }}
                   >

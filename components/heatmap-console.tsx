@@ -6,6 +6,7 @@ import HeatMap from "./heat-map";
 import HourlyStrip from "./hourly-strip";
 import VenueMap from "./venue-map";
 import { INK } from "@/lib/forecast/scales";
+import { NIGHT, SEMANTIC, ThemeProvider } from "@/lib/ui/theme";
 import { TIME_BANDS } from "@/lib/forecast/risk";
 import { daylightWindow } from "@/lib/forecast/solar";
 import type { HeatConditions } from "@/lib/forecast/heatfield";
@@ -162,7 +163,25 @@ export default function HeatmapConsole() {
     return `${hh}:${String(mm).padStart(2, "0")}`;
   };
 
+  /**
+   * `/heatmap` は配色テーマ導入後も暗色固定の独立ルート（トグル切替の対象外）。
+   * だが中で使う `HourlyStrip` は `useTheme()` 化されており、Provider の外では
+   * 明色にフォールバックする。ここだけ明示的に night を渡して暗色を保つ
+   * （2026-08-14、担当外ファイルは変更せずこちらで吸収する）。
+   */
+  const nightTheme = useMemo(
+    () => ({
+      name: "night" as const,
+      T: NIGHT,
+      sem: SEMANTIC.night,
+      canToggle: false,
+      toggle: () => {},
+    }),
+    []
+  );
+
   return (
+    <ThemeProvider value={nightTheme}>
     <div style={{ minHeight: "100vh", background: INK.page, color: INK.text }}>
       <style>{`@media (max-width: 900px){ .hm-split{grid-template-columns:1fr !important} }`}</style>
       <div style={{ maxWidth: 1360, margin: "0 auto", padding: "18px 18px 72px" }}>
@@ -338,6 +357,7 @@ export default function HeatmapConsole() {
         </div>
       </div>
     </div>
+    </ThemeProvider>
   );
 }
 

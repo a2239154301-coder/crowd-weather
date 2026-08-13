@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { Database, Zap, Lock } from "lucide-react";
-import { DAY } from "@/lib/ui/day-theme";
+import { useTheme } from "@/lib/ui/theme";
 
 /**
  * 審査モードの「データ設計」パネル。
@@ -28,19 +28,26 @@ const C = {
 };
 const mono = "'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace";
 
-const Panel = ({ children, style }: { children?: ReactNode; style?: CSSProperties }) => (
-  <div style={{ background: DAY.surface, border: `1px solid ${DAY.line}`, borderRadius: 16, ...style }}>
-    {children}
-  </div>
-);
-const Eyebrow = ({ children }: { children?: ReactNode }) => (
-  <div style={{ fontFamily: mono, fontSize: 13, letterSpacing: 2, color: DAY.textFaint, textTransform: "uppercase" }}>
-    {children}
-  </div>
-);
+const Panel = ({ children, style }: { children?: ReactNode; style?: CSSProperties }) => {
+  const { T } = useTheme();
+  return (
+    <div style={{ background: T.surface, border: `1px solid ${T.line}`, borderRadius: 16, ...style }}>
+      {children}
+    </div>
+  );
+};
+const Eyebrow = ({ children }: { children?: ReactNode }) => {
+  const { T } = useTheme();
+  return (
+    <div style={{ fontFamily: mono, fontSize: 13, letterSpacing: 2, color: T.textFaint, textTransform: "uppercase" }}>
+      {children}
+    </div>
+  );
+};
 
 // ---- データ設計 ----
 export function DataView() {
+  const { T } = useTheme();
   const open = [
     { n: "人流統計", src: "東京データプラットフォーム", feeds: ["混雑"] },
     { n: "道路ネットワーク・幅員", src: "東京都オープンデータ", feeds: ["混雑"] },
@@ -66,7 +73,7 @@ export function DataView() {
           gap: 5,
           fontFamily: mono,
           fontSize: 13,
-          color: DAY.text,
+          color: T.text,
           background: tone + "22",
           border: `1px solid ${tone}44`,
           borderRadius: 99,
@@ -82,9 +89,9 @@ export function DataView() {
     );
   };
   const Card = ({ d }: { d: { n: string; src: string; feeds: string[]; note?: string } }) => (
-    <div style={{ background: DAY.raised, border: `1px solid ${DAY.line}`, borderRadius: 12, padding: "12px 14px" }}>
-      <div style={{ fontWeight: 700, fontSize: 13, color: DAY.text }}>{d.n}</div>
-      <div style={{ fontFamily: mono, fontSize: 13, color: DAY.textFaint, margin: "3px 0 7px" }}>
+    <div style={{ background: T.raised, border: `1px solid ${T.line}`, borderRadius: 12, padding: "12px 14px" }}>
+      <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{d.n}</div>
+      <div style={{ fontFamily: mono, fontSize: 13, color: T.textFaint, margin: "3px 0 7px" }}>
         {d.src}
         {d.note ? ` ── ${d.note}` : ""}
       </div>
@@ -108,7 +115,7 @@ export function DataView() {
             <Card key={i} d={d} />
           ))}
         </div>
-        <div style={{ marginTop: 12, fontFamily: mono, fontSize: 13, color: DAY.textFaint, lineHeight: 1.7 }}>
+        <div style={{ marginTop: 12, fontFamily: mono, fontSize: 13, color: T.textFaint, lineHeight: 1.7 }}>
           ※ 3D都市モデルの活用は、2024年度都知事杯受賞作「高解像度熱中症リスクマップ」の系譜。本デモの日陰計算はその簡略版。
         </div>
       </Panel>
@@ -126,8 +133,8 @@ export function DataView() {
         <div
           style={{
             marginTop: 12,
-            background: DAY.page,
-            border: `1px dashed ${DAY.line}`,
+            background: T.page,
+            border: `1px dashed ${T.line}`,
             borderRadius: 11,
             padding: "11px 13px",
             display: "flex",
@@ -135,7 +142,7 @@ export function DataView() {
           }}
         >
           <Lock size={14} color={C.caution} style={{ flexShrink: 0, marginTop: 2 }} />
-          <div style={{ fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
+          <div style={{ fontSize: 13, color: T.textDim, lineHeight: 1.7 }}>
             民間イベントデータは、主催者との信頼関係がなければ集まらない。イベント制作の当事者である私たち自身が「データの持ち込み手」——ここが最大の参入障壁になる。
           </div>
         </div>

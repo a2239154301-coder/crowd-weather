@@ -1,6 +1,6 @@
 "use client";
 
-import { DAY } from "@/lib/ui/day-theme";
+import { useTheme, type Tokens } from "@/lib/ui/theme";
 import { EVIDENCE_SOURCES, INDEX100_PERSONS_PER_SQM, type ConfidenceTag } from "@/lib/forecast/evidence";
 
 /**
@@ -17,13 +17,23 @@ import { EVIDENCE_SOURCES, INDEX100_PERSONS_PER_SQM, type ConfidenceTag } from "
  * （staff-board.tsx 等で既に使われている #0F6E56 / #B45309 と同系統の色）。
  */
 
-/** 信頼度3段階: 文字色（白地4.5:1以上）と、元の段階色を残すドットの色 */
-const CONFIDENCE_TONE: Record<ConfidenceTag, { text: string; dot: string }> = {
-  一次確認済み: { text: "#0F6E56", dot: "#22C55E" }, // 白地6.20:1
-  二次資料: { text: "#B45309", dot: "#FDE047" }, // 白地5.02:1
-  推定: { text: DAY.textFaint, dot: "#FB923C" }, // 白地5.72:1
-};
+/**
+ * 信頼度3段階: 文字色と、元の段階色を残すドットの色。
+ * 文字色はテーマの意味色（`sem`）経由 — 明色なら白地4.5:1以上の墨色系、
+ * 暗色なら暗色地4.5:1以上の元の段階色系（lib/ui/theme.ts の SEMANTIC 参照）
+ */
+function confidenceTone(
+  sem: { good: string; caution: string; weak: string }
+): Record<ConfidenceTag, { text: string; dot: string }> {
+  return {
+    一次確認済み: { text: sem.good, dot: "#22C55E" },
+    二次資料: { text: sem.caution, dot: "#FDE047" },
+    推定: { text: sem.weak, dot: "#FB923C" },
+  };
+}
 export default function EvidencePanel() {
+  const { T, sem } = useTheme();
+  const CONFIDENCE_TONE = confidenceTone(sem);
   return (
     <div style={{ display: "grid", gap: 14, maxWidth: 980, marginTop: 14 }}>
       {/*
@@ -31,23 +41,23 @@ export default function EvidencePanel() {
         （再設計 §2-2・§2-5）、この文はプロダクトの中核主張なので消さずここへ移設した。
         審査モードは `/heatmap` のリスク地図とセットで説明できる位置にある。
       */}
-      <section style={card}>
+      <section style={card(T)}>
         <h2 style={h2}>リスク予報 ── 「いま」ではなく「これから」</h2>
-        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.8, color: DAY.textDim }}>
-          色は<b style={{ color: DAY.text }}>いまの値ではなく、危険帯に入るまでの残り時間</b>。
+        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.8, color: T.textDim }}>
+          色は<b style={{ color: T.text }}>いまの値ではなく、危険帯に入るまでの残り時間</b>。
           判定は混雑が主で、WBGTが31℃以上のとき段を1つ上げる。
           既存サービスが出せるのは「いま混んでいる場所」まで —
-          ここで出しているのは<b style={{ color: DAY.text }}>これから危なくなる場所</b>。
+          ここで出しているのは<b style={{ color: T.text }}>これから危なくなる場所</b>。
           このリスク地図は <code>/heatmap</code> で全画面表示できる。
         </p>
       </section>
 
-      <section style={card}>
+      <section style={card(T)}>
         <h2 style={h2}>モデルの根拠と限界</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#0F6E56", marginBottom: 6 }}>文献・物理で裏付けている部分</div>
-            <ul style={ul}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: sem.good, marginBottom: 6 }}>文献・物理で裏付けている部分</div>
+            <ul style={ul(T)}>
               <li>WBGT — 物理計算（Kasten-Young日射→Stull湿球→黒球合成）。馬場v4原本と82アサーション一致</li>
               <li>暑熱の段階 — 環境省の暑さ指数区分（25/28/31℃）</li>
               <li>混雑指数の危険帯（75）— 人/m²に較正し、滞留系 ≈4.1人/m²（ジャム密度帯）・通路系 ≈2.0人/m²（Fruin LOS E/F境界帯）に整合することをテストで固定</li>
@@ -56,26 +66,26 @@ export default function EvidencePanel() {
             </ul>
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#B45309", marginBottom: 6 }}>ヒューリスティックな部分（観測で正す設計）</div>
-            <ul style={ul}>
-              <li>在場率カーブ・ゾーン係数 — 実測代替の仮定値。<b style={{ color: DAY.text }}>実運用では入退場ログ・カメラで較正する</b>（それまでの間はナウキャスト補正が観測とのずれを埋める — 当日「調整」の仕組みそのもの）</li>
+            <div style={{ fontSize: 13, fontWeight: 700, color: sem.caution, marginBottom: 6 }}>ヒューリスティックな部分（観測で正す設計）</div>
+            <ul style={ul(T)}>
+              <li>在場率カーブ・ゾーン係数 — 実測代替の仮定値。<b style={{ color: T.text }}>実運用では入退場ログ・カメラで較正する</b>（それまでの間はナウキャスト補正が観測とのずれを埋める — 当日「調整」の仕組みそのもの）</li>
               <li>タイムテーブル需要倍率（演目中1.5倍・幕間1.35倍）— 現場定説の式化。同上</li>
               <li>退場の分岐比率・通路幅 — デモ会場の想定値（コードに明記）</li>
             </ul>
           </div>
         </div>
-        <div style={{ marginTop: 10, fontSize: 13, color: DAY.textDim }}>
+        <div style={{ marginTop: 10, fontSize: 13, color: T.textDim }}>
           較正定数（指数100 = 何人/m²）: 滞留系 {INDEX100_PERSONS_PER_SQM.queue} ／ 屋内系 {INDEX100_PERSONS_PER_SQM.indoor} ／ 通路系 {INDEX100_PERSONS_PER_SQM.corridor}
         </div>
       </section>
 
-      <section style={card}>
+      <section style={card(T)}>
         <h2 style={h2}>出典（信頼度を3段階で表記）</h2>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr>
               {["主張", "値", "信頼度", "出典"].map((h) => (
-                <th key={h} style={th}>{h}</th>
+                <th key={h} style={th(T)}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -84,9 +94,9 @@ export default function EvidencePanel() {
               const tone = CONFIDENCE_TONE[s.confidence];
               return (
                 <tr key={i}>
-                  <td style={td}>{s.claim}</td>
-                  <td style={{ ...td, fontFamily: "var(--font-mono)" }}>{s.value}</td>
-                  <td style={{ ...td, color: tone.text }}>
+                  <td style={td(T)}>{s.claim}</td>
+                  <td style={{ ...td(T), fontFamily: "var(--font-mono)" }}>{s.value}</td>
+                  <td style={{ ...td(T), color: tone.text }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                       <span
                         aria-hidden
@@ -95,7 +105,7 @@ export default function EvidencePanel() {
                       {s.confidence}
                     </span>
                   </td>
-                  <td style={{ ...td, color: DAY.textDim }}>{s.source}</td>
+                  <td style={{ ...td(T), color: T.textDim }}>{s.source}</td>
                 </tr>
               );
             })}
@@ -103,13 +113,13 @@ export default function EvidencePanel() {
         </table>
       </section>
 
-      <section style={card}>
+      <section style={card(T)}>
         <h2 style={h2}>データの段階（T0〜T3）と画面の対応</h2>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr>
               {["段", "データ", "今の実装", "使う画面"].map((h) => (
-                <th key={h} style={th}>{h}</th>
+                <th key={h} style={th(T)}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -122,13 +132,13 @@ export default function EvidencePanel() {
             ].map((row, i) => (
               <tr key={i}>
                 {row.map((c, j) => (
-                  <td key={j} style={{ ...td, ...(j === 0 ? { fontWeight: 700, whiteSpace: "nowrap" } : {}) }}>{c}</td>
+                  <td key={j} style={{ ...td(T), ...(j === 0 ? { fontWeight: 700, whiteSpace: "nowrap" } : {}) }}>{c}</td>
                 ))}
               </tr>
             ))}
           </tbody>
         </table>
-        <p style={{ margin: "10px 0 0", fontSize: 13, color: DAY.textDim, lineHeight: 1.8 }}>
+        <p style={{ margin: "10px 0 0", fontSize: 13, color: T.textDim, lineHeight: 1.8 }}>
           段が進むほど鮮度が高く、信頼度の重みも大きい（カメラ &gt; ボタン報告 &gt; 自由文 &gt; 写真）。
           統合は決定的計算（ナウキャスト）で行い、LLMは自由文・写真の構造化にだけ使う。
         </p>
@@ -137,30 +147,38 @@ export default function EvidencePanel() {
   );
 }
 
-const card: React.CSSProperties = {
-  background: DAY.surface,
-  border: `1px solid ${DAY.line}`,
+// module scope（コンポーネント外）なので useTheme は呼べない。呼び出し側の T を渡す
+// 関数として持つ（2026-08-14、配色テーマ切替対応。card/th/td のみテーマ依存、h2 は非依存）
+const card = (T: Tokens): React.CSSProperties => ({
+  background: T.surface,
+  border: `1px solid ${T.line}`,
   borderRadius: 12,
   padding: 18,
-};
+});
 
 const h2: React.CSSProperties = { margin: "0 0 12px", fontSize: 15, fontWeight: 700 };
 
-const ul: React.CSSProperties = { margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.9, color: DAY.textDim };
+const ul = (T: Tokens): React.CSSProperties => ({
+  margin: 0,
+  paddingLeft: 18,
+  fontSize: 13,
+  lineHeight: 1.9,
+  color: T.textDim,
+});
 
-const th: React.CSSProperties = {
+const th = (T: Tokens): React.CSSProperties => ({
   textAlign: "left",
   padding: "6px 9px",
   fontSize: 13,
-  color: DAY.textFaint,
-  borderBottom: `1px solid ${DAY.line}`,
+  color: T.textFaint,
+  borderBottom: `1px solid ${T.line}`,
   fontWeight: 600,
-};
+});
 
-const td: React.CSSProperties = {
+const td = (T: Tokens): React.CSSProperties => ({
   padding: "7px 9px",
-  borderBottom: `1px solid ${DAY.hairline}`,
-  color: DAY.text,
+  borderBottom: `1px solid ${T.hairline}`,
+  color: T.text,
   verticalAlign: "top",
   lineHeight: 1.6,
-};
+});

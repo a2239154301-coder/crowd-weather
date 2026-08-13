@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { DAY } from "@/lib/ui/day-theme";
+import { useTheme } from "@/lib/ui/theme";
 
 /**
  * 原案（Before）と改善案（After）を行き来するための帯。
@@ -21,6 +21,7 @@ const PAGES: { href: string; tag: string; label: string; note: string }[] = [
 ];
 
 export default function CompareBar() {
+  const { T } = useTheme();
   const path = usePathname();
   return (
     <nav
@@ -31,13 +32,13 @@ export default function CompareBar() {
         flexWrap: "wrap",
         alignItems: "center",
         padding: "8px 10px",
-        background: DAY.surface,
-        border: `1px solid ${DAY.line}`,
+        background: T.surface,
+        border: `1px solid ${T.line}`,
         borderRadius: 11,
         marginBottom: 14,
       }}
     >
-      <span style={{ fontSize: 13, color: DAY.textFaint, paddingRight: 4, letterSpacing: 1 }}>版</span>
+      <span style={{ fontSize: 13, color: T.textFaint, paddingRight: 4, letterSpacing: 1 }}>版</span>
       {PAGES.map((p) => {
         const current = path === p.href;
         return (
@@ -53,9 +54,9 @@ export default function CompareBar() {
               padding: "6px 12px",
               borderRadius: 8,
               textDecoration: "none",
-              background: current ? DAY.text : "transparent",
-              color: current ? DAY.page : DAY.textDim,
-              border: `1px solid ${current ? DAY.text : DAY.line}`,
+              background: current ? T.text : "transparent",
+              color: current ? T.page : T.textDim,
+              border: `1px solid ${current ? T.text : T.line}`,
             }}
           >
             <span style={{ fontSize: 13, opacity: 0.75 }}>{p.tag}</span>

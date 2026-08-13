@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useScenario } from "@/lib/ui/scenario-context";
 import { dayPlan } from "@/lib/forecast/model";
 import { postsFor, postsToMarks } from "@/lib/ops/staffing";
-import { DAY } from "@/lib/ui/day-theme";
+import { useTheme } from "@/lib/ui/theme";
 import SecurityPlan from "./security-plan";
 
 /**
@@ -15,6 +15,7 @@ import SecurityPlan from "./security-plan";
  * 条件は ScenarioProvider 経由で予報コンソールと同一（このタブで数字がズレることはない）。
  */
 export default function PlanOutput() {
+  const { T } = useTheme();
   const { scenario } = useScenario();
   const plan = useMemo(() => dayPlan(scenario), [scenario]);
   const staff = useMemo(() => postsToMarks(postsFor(plan)), [plan]);
@@ -25,7 +26,7 @@ export default function PlanOutput() {
         style={{
           margin: 0,
           fontSize: 13,
-          color: DAY.textDim,
+          color: T.textDim,
           lineHeight: 1.8,
           maxWidth: 780,
         }}

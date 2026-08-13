@@ -3,7 +3,8 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { INK } from "@/lib/forecast/scales";
-import { DAY, NAV_ACCENT } from "@/lib/ui/day-theme";
+import { NAV_ACCENT } from "@/lib/ui/day-theme";
+import { ThemeProvider, useThemeState } from "@/lib/ui/theme";
 import OpsConsole from "./ops-console";
 import IngestPanel from "./ingest-panel";
 import VisitorRoute from "./visitor-route";
@@ -91,12 +92,21 @@ function pick<T extends string>(raw: string | null, allowed: readonly T[], fallb
  * `useSearchParams` は静的レンダリング時に Suspense 境界を要求する
  * （境界が無いと `next build` が落ちる）。app/page.tsx を触らずに済むよう、
  * 境界はこのファイル内に置く（app/gate/page.tsx と同じ形）。
- * fallback は「/」のプリレンダーHTMLそのものになるため、地色だけは塗っておく
- * （null にすると初回描画で白が一瞬出る）。
+ * fallback は「/」のプリレンダーHTMLそのものになる。
+ *
+ * 2026-08-14（テーマ切替の導入時）: **fallback に地色を敷くのをやめた。**
+ * ここは `mode` が決まる前（useSearchParams が suspend 中）に描かれるのでテーマを解決できず、
+ * 明色を敷けば暗色モードで、暗色を敷けば明色モードで、それぞれ画面いっぱいの違う色の面が出る。
+ *
+ * 実測（08-14・ブラウザペイン非表示の環境）で、ストリーミングSSRの `<template id="B:0">` と
+ * 差し替え先 `<div id="S:0">` が**両方DOMに残っている**状態を観測した。入れ替えスクリプトが
+ * 走り切っていない状態で、実機では解消される可能性が高いが確認できない。
+ * 残った場合に「100vhの色違いの帯」が出るリスクを避けるため、地色は透明のままにして
+ * **`app/globals.css` の body 背景に任せる**（白のちらつき防止という当初の目的はそちらで足りる）。
  */
 export default function AppShell() {
   return (
-    <Suspense fallback={<div style={{ minHeight: "100vh", background: DAY.page }} />}>
+    <Suspense fallback={<div style={{ minHeight: "100vh" }} />}>
       <AppShellInner />
     </Suspense>
   );
@@ -156,9 +166,15 @@ function AppShellInner() {
     syncUrl({ mode, view, live: l }, "replace");
   };
 
+  // 配色テーマ（2026-08-14新設）。制作向け・審査向けは既定=暗色でトグル可、
+  // 現場向け・来場者向けは明色固定（lib/ui/theme.ts の MODE_THEME）
+  const theme = useThemeState(mode);
+  const T = theme.T;
+
   return (
     <ScenarioProvider>
-    <div style={{ minHeight: "100vh", background: DAY.page, color: DAY.text }}>
+    <ThemeProvider value={theme}>
+    <div style={{ minHeight: "100vh", background: T.page, color: T.text }}>
       <style>{`
         @media (max-width: 900px) {
           .cw-split { grid-template-columns: 1fr !important; }
@@ -182,7 +198,7 @@ function AppShellInner() {
               <h1 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: 2 }}>
                 CROWD WEATHER
               </h1>
-              <span style={{ fontSize: 13, color: DAY.textDim }}>混雑は、予報できる。</span>
+              <span style={{ fontSize: 13, color: T.textDim }}>混雑は、予報できる。</span>
             </div>
           </div>
 
@@ -225,6 +241,34 @@ function AppShellInner() {
               </button>
             ))}
           </div>
+
+          {/* 配色トグル。制作向け・審査向け（既定=暗色）だけに出す。屋外系（現場・来場者）は
+              明色固定で判読性を優先するため、ここに出さない（lib/ui/theme.ts 冒頭コメント参照） */}
+          {theme.canToggle && (
+            <button
+              onClick={theme.toggle}
+              aria-label={
+                theme.name === "night" ? "配色を明色に切り替える" : "配色を暗色に切り替える"
+              }
+              title={theme.name === "night" ? "明色に切り替える" : "暗色に切り替える"}
+              style={{
+                minWidth: 44,
+                minHeight: 44,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 11,
+                border: `1px solid ${INK.line}`,
+                background: INK.surface,
+                color: INK.textDim,
+                cursor: "pointer",
+                fontSize: 18,
+                lineHeight: 1,
+              }}
+            >
+              {theme.name === "night" ? "☀" : "☾"}
+            </button>
+          )}
         </header>
 
         {mode === "plan" && (
@@ -244,8 +288,8 @@ function AppShellInner() {
                 style={{
                   display: "flex",
                   gap: 3,
-                  background: DAY.surface,
-                  border: `1px solid ${DAY.line}`,
+                  background: T.surface,
+                  border: `1px solid ${T.line}`,
                   borderRadius: 10,
                   padding: 3,
                 }}
@@ -263,9 +307,9 @@ function AppShellInner() {
                       cursor: "pointer",
                       fontSize: 13,
                       fontWeight: 600,
-                      background: view === k ? DAY.raised : "transparent",
-                      color: view === k ? DAY.text : DAY.textDim,
-                      boxShadow: view === k ? `inset 0 0 0 1px ${DAY.line}` : "none",
+                      background: view === k ? T.raised : "transparent",
+                      color: view === k ? T.text : T.textDim,
+                      boxShadow: view === k ? `inset 0 0 0 1px ${T.line}` : "none",
                     }}
                   >
                     {label}
@@ -289,8 +333,8 @@ function AppShellInner() {
                 style={{
                   display: "flex",
                   gap: 3,
-                  background: DAY.surface,
-                  border: `1px solid ${DAY.line}`,
+                  background: T.surface,
+                  border: `1px solid ${T.line}`,
                   borderRadius: 10,
                   padding: 3,
                 }}
@@ -315,16 +359,16 @@ function AppShellInner() {
                       cursor: "pointer",
                       fontSize: 13,
                       fontWeight: 600,
-                      background: liveView === k ? DAY.raised : "transparent",
-                      color: liveView === k ? DAY.text : DAY.textDim,
-                      boxShadow: liveView === k ? `inset 0 0 0 1px ${DAY.line}` : "none",
+                      background: liveView === k ? T.raised : "transparent",
+                      color: liveView === k ? T.text : T.textDim,
+                      boxShadow: liveView === k ? `inset 0 0 0 1px ${T.line}` : "none",
                     }}
                   >
                     {label}
                   </button>
                 ))}
               </nav>
-              <span style={{ fontSize: 13, color: DAY.textFaint }}>
+              <span style={{ fontSize: 13, color: T.textFaint }}>
                 屋外・スマホ前提のため当日系の画面は明色
               </span>
             </div>
@@ -333,7 +377,7 @@ function AppShellInner() {
             {liveView === "board" && <StaffBoard />}
             {liveView === "staff" && (
               <>
-                <p style={{ margin: "0 0 14px", fontSize: 13, color: DAY.textDim, lineHeight: 1.8 }}>
+                <p style={{ margin: "0 0 14px", fontSize: 13, color: T.textDim, lineHeight: 1.8 }}>
                   現場スタッフのスマホ画面。名前で入場し、配置ポストの指示を受け、
                   現地の混雑・暑さをワンタップで報告する。
                 </p>
@@ -345,7 +389,7 @@ function AppShellInner() {
 
         {mode === "judge" && (
           <>
-            <p style={{ margin: "0 0 14px", fontSize: 13, color: DAY.textDim, lineHeight: 1.8 }}>
+            <p style={{ margin: "0 0 14px", fontSize: 13, color: T.textDim, lineHeight: 1.8 }}>
               審査員・技術説明のためのページ。運営者の業務画面からは分離している —
               データ設計（何を計算し、何をLLMに任せないか）・数値の出典・
               AIコストと安全対策をここにまとめて開示する。
@@ -364,7 +408,7 @@ function AppShellInner() {
               style={{
                 margin: "0 0 14px",
                 fontSize: 13,
-                color: DAY.textDim,
+                color: T.textDim,
                 lineHeight: 1.8,
               }}
             >
@@ -379,13 +423,13 @@ function AppShellInner() {
           style={{
             marginTop: 26,
             paddingTop: 14,
-            borderTop: `1px solid ${DAY.hairline}`,
+            borderTop: `1px solid ${T.hairline}`,
             display: "flex",
             justifyContent: "space-between",
             gap: 12,
             flexWrap: "wrap",
             fontSize: 13,
-            color: DAY.textFaint,
+            color: T.textFaint,
           }}
         >
           <span>事故ゼロと、最高の体験は、両立できる。</span>
@@ -393,6 +437,7 @@ function AppShellInner() {
         </footer>
       </div>
     </div>
+    </ThemeProvider>
     </ScenarioProvider>
   );
 }
