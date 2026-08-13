@@ -321,6 +321,10 @@ ${referenceHtml()}
               layer="crowd"
               staff={staff}
               compact
+              /* compact は本来ラベルを抑制するが、計画書の配置図はコードが読めることが目的
+                 （plan-output.tsx の説明文「配置図のマークには配置ポストのコード（A-1等）が入り」）。
+                 opt-in なので来場者の地図（visitor-route.tsx・同じく compact）には影響しない */
+              staffLabelInCompact
             />
             <div style={{ display: "flex", gap: 14, marginTop: 9, fontSize: 13, color: INK.textDim, flexWrap: "wrap" }}>
               <LegendDot color="#38BDF8" label="給水" />

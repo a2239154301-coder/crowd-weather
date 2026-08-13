@@ -22,6 +22,7 @@ import StoreStatus from "./store-status";
 import SyncBadge from "./sync-badge";
 import { useSyncStatus } from "@/lib/ui/use-polling";
 import { useDragToMap } from "@/lib/ui/use-drag-to-map";
+import { MQ_SPLIT } from "@/lib/ui/breakpoints";
 import InitialPlanPanel from "./board/initial-plan-panel";
 import ProposalPanel, { type Proposal } from "./board/proposal-panel";
 
@@ -458,7 +459,7 @@ export default function StaffBoard() {
   return (
     <div style={{ background: DAY.page, color: DAY.text, borderRadius: 16, border: `1px solid ${DAY.line}`, padding: 14, display: "grid", gap: 12 }}>
       <style>{`
-        @media (max-width: 760px) {
+        ${MQ_SPLIT} {
           .cw-board { grid-template-columns: 1fr !important; }
           .cw-board-list { max-height: 40vh; overflow-y: auto; }
         }

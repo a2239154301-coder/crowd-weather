@@ -655,6 +655,10 @@ export default function OpsConsole() {
             layer={layer}
             nowHour={clockHour}
             peakHour={peak.hour}
+            /* 2026-08-14: `staff` を算出しながら渡していないデッドコードだった（:133のコメントは
+               「地図にはポストコード付きマークとして出す」と書いてあるのに繋がっていなかった）。
+               これが「計画モードの会場図に受付ポスト R-1〜R-8 が出ない」の真因。 */
+            staff={staff}
           />
 
           {layer === "risk" && (

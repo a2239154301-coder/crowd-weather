@@ -6,6 +6,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { MQ_SPLIT } from "@/lib/ui/breakpoints";
 import {
   Sun, Cloud, CloudRain, Droplets, Users, Thermometer, Umbrella,
   AlertTriangle, MapPin, FileText, Navigation, Shield, Clock,
@@ -261,7 +262,7 @@ export default function CrowdWeather() {
         input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:${C.cool};border:3px solid ${C.ink};cursor:pointer;box-shadow:0 0 0 1px ${C.line}}
         input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:${C.cool};border:3px solid ${C.ink};cursor:pointer}
         *{box-sizing:border-box}
-        @media(max-width:840px){.cw-grid{grid-template-columns:1fr!important}}`}</style>
+        ${MQ_SPLIT}{.cw-grid{grid-template-columns:1fr!important}}`}</style>
 
       <div style={{maxWidth:1160,margin:"0 auto",padding:"22px 18px 64px"}}>
 
@@ -607,6 +608,11 @@ export function DataView() {
   );
   return (
     <div className="cw-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      {/* 2026-08-14 追加: DataView は審査用タブ（app-shell.tsx）から単体で描画されるが、
+          `.cw-grid` のメディアクエリは下の CrowdWeather 側の <style> にあり、そちらは
+          審査タブでは**マウントされない**。そのため狭い画面でも2カラムのまま潰れていた。
+          自前で持たせて解消する（ブレークポイントは lib/ui/breakpoints.ts に統一）。 */}
+      <style>{`${MQ_SPLIT}{.cw-grid{grid-template-columns:1fr!important}}`}</style>
       <Panel style={{padding:18}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
           <Database size={15} color={C.cool}/><Eyebrow>東京都オープンデータ 等</Eyebrow></div>

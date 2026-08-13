@@ -156,6 +156,17 @@ type Props = {
    * 白い太枠＋塗り強めで「ここに落ちる」を示す。未指定時は従来描画と一致。
    */
   highlightZoneId?: string | null;
+  /**
+   * `compact` でもポストコードのラベルを出す（2026-08-14 追加）。
+   *
+   * ⚠ **`compact` の既定挙動は変えないこと。** `compact` の消費者は2つあり、
+   * `security-plan.tsx`（計画書の配置図・staffあり）と `visitor-route.tsx`（来場者の地図・staffなし）。
+   * `compact` 側でラベルを出すよう既定を変えると来場者の地図まで巻き込む。
+   * そのため**明示的に渡したときだけ**出す opt-in にしてある。
+   * 目的は `plan-output.tsx` の説明文「配置図のマークには配置ポストのコード（A-1等）が入り」を
+   * 事実にすること（従来は compact が無条件にラベルを抑制していて説明と食い違っていた）。
+   */
+  staffLabelInCompact?: boolean;
 };
 
 export default function VenueMap({
@@ -177,6 +188,7 @@ export default function VenueMap({
   staffLabelMode = "all",
   labelStaffIndices,
   highlightZoneId = null,
+  staffLabelInCompact = false,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
   /** ポストコードラベルの hover 表示用（2026-08-13 追加）。staffLabelMode="focus" のときだけ意味を持つ */
@@ -505,7 +517,7 @@ export default function VenueMap({
            * labelStaffIndices指定のいずれかのみ — 全マーカー常時表示だと隣のラベルと重なるため。
            */
           const showLabel =
-            !compact &&
+            (!compact || staffLabelInCompact) &&
             (staffLabelMode === "all" || selected || hoveredStaff === i || (labelStaffIndices?.has(i) ?? false));
           return (
             <g
