@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listDispatches, listReports, listStaff, storeKind } from "@/lib/ops/store";
+import { listDeploymentPlans, listDispatches, listReports, listStaff, storeKind } from "@/lib/ops/store";
 
 /**
  * 運用の健康診断（2026-08-13 新設）。デモ・撮影の前にここを見る。
@@ -14,17 +14,24 @@ import { listDispatches, listReports, listStaff, storeKind } from "@/lib/ops/sto
  */
 export async function GET() {
   const kind = storeKind();
-  const [staff, reports, dispatches] = await Promise.all([
+  const [staff, reports, dispatches, deployments] = await Promise.all([
     listStaff(),
     listReports(),
     listDispatches(),
+    listDeploymentPlans(),
   ]);
   return NextResponse.json({
     store: kind,
     persistent: kind === "upstash",
     // ゲートが有効かどうか（値は返さない）。本番で無防備になっていないかの確認用
     gate: process.env.DEMO_ACCESS_KEY ? "on" : "off",
-    counts: { staff: staff.length, reports: reports.length, dispatches: dispatches.length },
+    // 素の整数のみ（計画ID・氏名などは載せない。秘密混入防止は下の応答キー集合テストが守る）
+    counts: {
+      staff: staff.length,
+      reports: reports.length,
+      dispatches: dispatches.length,
+      deployments: deployments.length,
+    },
     warning:
       kind === "memory"
         ? "メモリ保存です。本番URL（Vercel）ではスタッフ導線が安定しません。ローカルデモなら問題ありません"

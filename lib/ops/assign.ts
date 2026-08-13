@@ -114,8 +114,11 @@ export function buildAssignmentContext(
  * ポストコードの自然順比較。「A-2」が「A-10」より前に来る必要がある
  * （文字列比較だと "A-10" < "A-2" になり事故る）。ハイフンより前を接頭辞として比較し、
  * 同じ接頭辞なら数値部を数値として比較する。
+ *
+ * 2026-08-14 export化（lib/ops/deployment.ts の vacantPostsOf が再利用する。
+ * 同じロジックを2箇所に書かない）。
  */
-function comparePostCode(a: Post, b: Post): number {
+export function comparePostCode(a: Post, b: Post): number {
   const [aPrefix, aNum] = splitPostCode(a.code);
   const [bPrefix, bNum] = splitPostCode(b.code);
   if (aPrefix !== bPrefix) return aPrefix < bPrefix ? -1 : 1;

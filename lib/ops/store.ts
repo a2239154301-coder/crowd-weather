@@ -1,4 +1,5 @@
 import type { PostRole } from "./staffing";
+import type { DeploymentPlan } from "./deployment";
 
 /**
  * 当日運用のserver-side store — スタッフ・報告・指示の置き場。
@@ -73,13 +74,14 @@ type StoreShape = {
   staff: Map<string, Staff>;
   reports: Report[];
   dispatches: Dispatch[];
+  deployments: DeploymentPlan[];
 };
 
 const g = globalThis as unknown as { __cwOpsStore?: StoreShape };
 
 function mem(): StoreShape {
   if (!g.__cwOpsStore) {
-    g.__cwOpsStore = { staff: new Map(), reports: [], dispatches: [] };
+    g.__cwOpsStore = { staff: new Map(), reports: [], dispatches: [], deployments: [] };
   }
   return g.__cwOpsStore;
 }
@@ -210,7 +212,83 @@ export async function updateDispatch(id: string, status: DispatchStatus): Promis
   return hit;
 }
 
+// ── 配置計画（DeploymentPlan） ──────────────────────────────────────
+
+/**
+ * `lib/ops/deployment.ts` の DeploymentPlan コレクション（2026-08-14 新設）。
+ *
+ * 既存3キー（staff/reports/dispatches）と同じく「コレクション丸ごとJSON」方式。
+ * Upstash REST に CAS（Compare-And-Swap）が無いため `upGet`→`upSet` は依然として
+ * **非アトミック**（read-modify-write）。`DeploymentPlan.version` で lost update
+ * （同時書き込みでの上書き消失）を**検出**はできるが、書き込みの競合そのものを
+ * **防げるわけではない**（`saveDeploymentPlan` 参照）。本格運用なら
+ * `cw:deployment:{id}` の個別キー化＋`SET NX` か Lua スクリプトが要る。
+ * 単一指示者・デモ規模（同時書き込みが実質発生しない）では実害無しと判断した。
+ */
+
+async function readDeployments(): Promise<DeploymentPlan[]> {
+  if (useUpstash) return (await upGet<DeploymentPlan[]>("cw:deployments")) ?? [];
+  return [...mem().deployments];
+}
+
+async function writeDeployments(list: DeploymentPlan[]): Promise<void> {
+  if (useUpstash) {
+    await upSet("cw:deployments", list);
+  } else {
+    mem().deployments = list;
+  }
+}
+
+export async function listDeploymentPlans(): Promise<DeploymentPlan[]> {
+  return readDeployments();
+}
+
+/** status==="confirmed" のうち最新（createdAt降順の先頭）。無ければ null */
+export async function getConfirmedPlan(): Promise<DeploymentPlan | null> {
+  const confirmed = (await readDeployments()).filter((p) => p.status === "confirmed");
+  if (confirmed.length === 0) return null;
+  return confirmed.reduce((latest, p) => (p.createdAt > latest.createdAt ? p : latest));
+}
+
+/** status==="draft" のうち最新（createdAt降順の先頭）。無ければ null */
+export async function getDraftPlan(): Promise<DeploymentPlan | null> {
+  const drafts = (await readDeployments()).filter((p) => p.status === "draft");
+  if (drafts.length === 0) return null;
+  return drafts.reduce((latest, p) => (p.createdAt > latest.createdAt ? p : latest));
+}
+
+/**
+ * 楽観ロック付きの保存。`plan.id` が未知なら新規追加、既知なら
+ * `expectedVersion` が現在のバージョンと一致するときだけ上書きする。
+ * 不一致（他のリクエストが先に保存した）なら `ok:false` と現行版を返す
+ * （クライアントはこれを見て rebase できる）。新規追加は競合しようがないので
+ * `expectedVersion` を渡さなくてよい。
+ */
+export async function saveDeploymentPlan(
+  plan: DeploymentPlan,
+  expectedVersion?: number
+): Promise<{ ok: true; plan: DeploymentPlan } | { ok: false; current: DeploymentPlan }> {
+  const all = await readDeployments();
+  const idx = all.findIndex((p) => p.id === plan.id);
+
+  if (idx === -1) {
+    const next = [...all, plan].slice(-20);
+    await writeDeployments(next);
+    return { ok: true, plan };
+  }
+
+  const current = all[idx];
+  if (typeof expectedVersion === "number" && expectedVersion !== current.version) {
+    return { ok: false, current };
+  }
+
+  const next = [...all];
+  next[idx] = plan;
+  await writeDeployments(next.slice(-20));
+  return { ok: true, plan };
+}
+
 /** デモ用の初期化（開発時のみ想定。API経由では呼ばない） */
 export function resetStoreForDemo(): void {
-  g.__cwOpsStore = { staff: new Map(), reports: [], dispatches: [] };
+  g.__cwOpsStore = { staff: new Map(), reports: [], dispatches: [], deployments: [] };
 }

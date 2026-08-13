@@ -305,7 +305,10 @@ describe("GET /api/health — 診断の契約と秘密の非漏洩", () => {
     expect(body.store).toBe("memory");
     expect(body.persistent).toBe(false);
     expect(["on", "off"]).toContain(body.gate);
-    expect(body.counts).toEqual({ staff: 0, reports: 0, dispatches: 0 });
+    // 2026-08-14: deployments コレクション新設（lib/ops/deployment.ts）に伴い counts に
+    // deployments を追加。toEqual は完全一致なので、この行は意図的に維持し値を更新する
+    // （キー集合が固定されているという :339-341 の防波堤テストの意図を壊さないため）
+    expect(body.counts).toEqual({ staff: 0, reports: 0, dispatches: 0, deployments: 0 });
   });
 
   it("counts が実際の登録件数を反映する", async () => {
@@ -314,7 +317,8 @@ describe("GET /api/health — 診断の契約と秘密の非漏洩", () => {
       post("http://localhost/api/dispatch", { staffName: ROSTER_GUIDE, toZoneId: VALID_ZONE, action: "移動" })
     );
     const body = await (await healthGet()).json();
-    expect(body.counts).toEqual({ staff: 1, reports: 0, dispatches: 1 });
+    // 2026-08-14: deployments 追加分。この呼び出しでは配置計画を作っていないので 0 のまま
+    expect(body.counts).toEqual({ staff: 1, reports: 0, dispatches: 1, deployments: 0 });
   });
 
   it("合言葉の**値**を返さない（gate は on/off だけ）", async () => {
@@ -337,6 +341,8 @@ describe("GET /api/health — 診断の契約と秘密の非漏洩", () => {
   it("応答のキー集合が固定されている（将来の項目追加で秘密が混入しない防波堤）", async () => {
     const body = await (await healthGet()).json();
     expect(Object.keys(body).sort()).toEqual(["counts", "gate", "persistent", "store", "warning"]);
-    expect(Object.keys(body.counts).sort()).toEqual(["dispatches", "reports", "staff"]);
+    // 2026-08-14: counts に deployments を追加（lib/ops/deployment.ts 新設に伴う）。
+    // この防波堤テストが実際に仕事をした形なので、テストを消さず期待値だけ更新する
+    expect(Object.keys(body.counts).sort()).toEqual(["deployments", "dispatches", "reports", "staff"]);
   });
 });
