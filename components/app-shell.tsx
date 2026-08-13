@@ -8,6 +8,7 @@ import VisitorRoute from "./visitor-route";
 import LiveConsole from "./live-console";
 import AdjustConsole from "./adjust-console";
 import StaffConsole from "./staff-console";
+import StaffBoard from "./staff-board";
 import PlanOutput from "./plan-output";
 import EvidencePanel from "./evidence-panel";
 import { ScenarioProvider } from "@/lib/ui/scenario-context";
@@ -38,7 +39,7 @@ import { DataView } from "./crowd-weather";
 
 type Mode = "plan" | "live" | "visitor" | "judge";
 type OrganizerView = "ops" | "output" | "ingest";
-type LiveView = "status" | "adjust" | "staff";
+type LiveView = "status" | "adjust" | "board" | "staff";
 
 const ORGANIZER_TABS: [OrganizerView, string][] = [
   ["ops", "予報コンソール"],
@@ -266,6 +267,7 @@ export default function AppShell() {
                   [
                     ["status", "状況 — いまどこが危ないか"],
                     ["adjust", "調整 — 計画と実際を合わせる"],
+                    ["board", "配置 — メンバーを置き、動かす"],
                     ["staff", "スタッフ — 指示を受け、報告する"],
                   ] as [LiveView, string][]
                 ).map(([k, label]) => (
@@ -296,6 +298,7 @@ export default function AppShell() {
             </div>
             {liveView === "status" && <LiveConsole />}
             {liveView === "adjust" && <AdjustConsole />}
+            {liveView === "board" && <StaffBoard />}
             {liveView === "staff" && (
               <>
                 <p style={{ margin: "0 0 14px", fontSize: 13, color: INK.textDim, lineHeight: 1.8 }}>

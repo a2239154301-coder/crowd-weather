@@ -15,7 +15,13 @@ import type { PostRole } from "@/lib/ops/staffing";
 export type MapLayer = "crowd" | "heat" | "risk";
 
 /** role は staffing.ts の PostRole をそのまま使う（二重管理にしない） */
-export type StaffMark = { at: Point; role: PostRole; label: string };
+export type StaffMark = { at: Point; role: PostRole; label: string; glyph?: string };
+
+/**
+ * 移動指示の可視化（配置ボード 2026-08-13 追加）。`lib/ops/board.ts` の `GhostMark` と
+ * 構造的に同一（意図的に別定義: venue-map はops層に依存しない）。
+ */
+export type GhostMark = { from: Point | null; to: Point; glyph: string; kind: "sent" | "moving" };
 
 /**
  * 地面と建物の明度（2026-08-12 引き上げ）。
@@ -108,6 +114,8 @@ type Props = {
   zoneBadges?: Record<string, number>;
   /** マーカーの薄表示index集合（空席ポスト用・クリック不可・opacity 0.35） */
   dimmedStaffIndices?: ReadonlySet<number>;
+  /** アクティブな移動指示の点線マーカー（配置ボード 2026-08-13 追加）。未指定時は従来描画と一致 */
+  ghostMarks?: GhostMark[];
 };
 
 export default function VenueMap({
@@ -125,6 +133,7 @@ export default function VenueMap({
   onZoneClick,
   zoneBadges,
   dimmedStaffIndices,
+  ghostMarks,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
 
@@ -187,6 +196,13 @@ export default function VenueMap({
           <filter id="cw-soft" x="-30%" y="-30%" width="160%" height="160%">
             <feGaussianBlur stdDeviation="9" />
           </filter>
+          {/* ゴースト矢印（配置ボード 移動指示の可視化）。sent=グレー・moving=青 */}
+          <marker id="cw-ghost-arrow-sent" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto-start-reverse">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#94A3B8" />
+          </marker>
+          <marker id="cw-ghost-arrow-moving" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto-start-reverse">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#38BDF8" />
+          </marker>
         </defs>
 
         {/* 1. 地面 */}
@@ -384,6 +400,32 @@ export default function VenueMap({
             );
           })}
 
+        {/* 4.6 ゴーストマーク（配置ボード 移動指示の可視化・2026-08-13 追加） */}
+        {!compact &&
+          ghostMarks?.map((g, i) => {
+            const color = g.kind === "moving" ? "#38BDF8" : "#94A3B8";
+            return (
+              <g key={i} style={{ pointerEvents: "none" }}>
+                {g.from && (
+                  <line
+                    x1={g.from.x}
+                    y1={g.from.y}
+                    x2={g.to.x}
+                    y2={g.to.y}
+                    stroke={color}
+                    strokeWidth={1.6}
+                    strokeDasharray="4 3"
+                    markerEnd={`url(#cw-ghost-arrow-${g.kind})`}
+                  />
+                )}
+                <circle cx={g.to.x} cy={g.to.y} r={13} fill="none" stroke={color} strokeWidth={2} strokeDasharray="4 3" />
+                <text x={g.to.x} y={g.to.y + 5} textAnchor="middle" fontSize={13} fill={color} fontWeight={700}>
+                  {g.glyph}
+                </text>
+              </g>
+            );
+          })}
+
         {/* 5. スタッフ配置 */}
         {staff?.map((m, i) => {
           const dimmed = dimmedStaffIndices?.has(i) ?? false;
@@ -416,7 +458,7 @@ export default function VenueMap({
                 fill="#0A0E17"
                 style={{ pointerEvents: "none" }}
               >
-                {ROLE_GLYPH[m.role]}
+                {m.glyph ?? ROLE_GLYPH[m.role]}
               </text>
               {!compact && (
                 <text
