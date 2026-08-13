@@ -266,6 +266,18 @@ async function attempt(
       );
     }
 
+    // ⚠ Agent Firewallによる遮断も黙って通さない（2026-08-13実測で判明）。
+    // response段階のブロックはHTTP 400ではなく、HTTP 200 + finish_reason="content_filter" +
+    // content に "[blocked by workspace firewall policy: ...]" という形で返る
+    // （inbound段階のHTTP 400ブロックとは別の経路。scripts/firewall-check.mjs参照）。
+    // ここで検出しないと「JSONパース失敗」として遠くで現れる。
+    if (finish === "content_filter" && /firewall/i.test(data.choices?.[0]?.message?.content ?? "")) {
+      throw new OrcaError(
+        `${model} の呼び出しはゲートウェイのFirewallに遮断されました: ${data.choices?.[0]?.message?.content}`,
+        403
+      );
+    }
+
     // tool指定時は function.arguments（JSON文字列）を text として返す。
     // Firewallにdenyされた場合は上のerrorチェック（!res.ok）で OrcaError になる
     const message = data.choices?.[0]?.message;

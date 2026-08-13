@@ -197,11 +197,15 @@ export default function TrustPanel() {
             />
           )}
           <SecRow
-            title={`${PII_SHIELD_VERIFIED ? "③" : "②"} APIキーはサーバー側に隔離`}
+            title={`${PII_SHIELD_VERIFIED ? "③" : "②"} Agent Firewall — AI提案の宛先を、ゲートウェイ側でも検証`}
+            body="配置提案（propose_dispatch）をresponse_formatではなくtool呼び出しに変更し、OrcaRouterのAgent Firewallの管轄に入れた（Firewallはtool呼び出しだけを見る）。遮断できることは実測で確認済み（2026-08-13・scripts/firewall-check.mjs）: HTTP 200＋finish_reason=content_filter＋『[blocked by workspace firewall policy: ...]』という形で返る。ただし本番は『監視のみ』に留めている。提案は配列構造のため、実在ゾーン限定の条件を安全に組み切る時間が確保できず、機能を壊すリスクを避けた（OrcaRouter推奨のobserve→shadow→enforceの観測段階）。遮断能力そのものは証明済みで、完全ブロック運用は次の課題として明記する。"
+          />
+          <SecRow
+            title={`${PII_SHIELD_VERIFIED ? "④" : "③"} APIキーはサーバー側に隔離`}
             body="キーは Vercel の環境変数のみに置き、ブラウザに出ない。OrcaRouterを呼ぶ口は lib/ai/orca.ts の1ファイルに集約してあり、キーが外に出ないことをこのファイルだけで検証できる。デモ画面自体も合言葉ゲート（HttpOnly Cookie）の内側。"
           />
           <SecRow
-            title={`${PII_SHIELD_VERIFIED ? "④" : "③"} デモデータは架空会場`}
+            title={`${PII_SHIELD_VERIFIED ? "⑤" : "④"} デモデータは架空会場`}
             body="「みなと臨海公園 特設会場」は実在しない。実在会場の警備配置・手薄な時間帯を公開リポジトリやデモに含めない。"
           />
         </div>

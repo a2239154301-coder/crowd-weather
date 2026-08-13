@@ -96,15 +96,21 @@ const res = await fetch(`${ORCA_BASE}/chat/completions`, {
 const ms = Date.now() - t0;
 const data = await res.json().catch(() => ({}));
 const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
-const blocked =
-  !res.ok &&
-  /firewall/i.test(JSON.stringify(data?.error ?? {}));
+const content = data?.choices?.[0]?.message?.content ?? "";
+// 実測（2026-08-13）: response段階のブロックはHTTP 400ではなく、
+// HTTP 200 + finish_reason="content_filter" + content に
+// "[blocked by workspace firewall policy: ...]" という形で返る。
+// docsの「inboundはHTTP 400」はinbound段階の話で、response段階は別の形。
+const blockedByError = !res.ok && /firewall/i.test(JSON.stringify(data?.error ?? {}));
+const blockedByContentFilter =
+  data?.choices?.[0]?.finish_reason === "content_filter" && /firewall/i.test(content);
+const blocked = blockedByError || blockedByContentFilter;
 
 console.log(`HTTP ${res.status} / ${ms}ms`);
 
 if (EXPECT_DENY) {
   if (blocked) {
-    console.log(`✅ 遮断を確認: ${data?.error?.message ?? "(firewall_blocked)"}`);
+    console.log(`✅ 遮断を確認: ${data?.error?.message ?? (content || "(firewall_blocked)")}`);
     console.log("→ enforcementは実在する。ルールを本命（args_match_json）に差し替えて手順3へ");
     process.exit(0);
   }
