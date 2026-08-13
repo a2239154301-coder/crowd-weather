@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import type { DayPlan, Scenario } from "@/lib/forecast/types";
 import { zonesFor } from "@/lib/forecast/venue";
-import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
+import { densityBand, wbgtBand } from "@/lib/forecast/scales";
+import { DAY } from "@/lib/ui/day-theme";
 import { STAFFING_REFERENCE } from "@/lib/ops/staffing";
 import VenueMap, { type StaffMark } from "./venue-map";
 import SourceTag from "./source-tag";
@@ -188,8 +189,8 @@ ${referenceHtml()}
     <section
       ref={printRef}
       style={{
-        background: INK.surface,
-        border: `1px solid ${INK.line}`,
+        background: DAY.surface,
+        border: `1px solid ${DAY.line}`,
         borderRadius: 14,
         padding: 20,
       }}
@@ -203,12 +204,12 @@ ${referenceHtml()}
           gap: 12,
           flexWrap: "wrap",
           paddingBottom: 12,
-          borderBottom: `1px solid ${INK.line}`,
+          borderBottom: `1px solid ${DAY.line}`,
         }}
       >
         <div>
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>雑踏警備計画書（自動生成・抜粋）</h2>
-          <div style={{ fontSize: 13, color: INK.textFaint, marginTop: 3 }}>
+          <div style={{ fontSize: 13, color: DAY.textFaint, marginTop: 3 }}>
             警察への事前協議・社内稟議で用いる法定文書のフォーマットに準拠
           </div>
         </div>
@@ -220,9 +221,9 @@ ${referenceHtml()}
               minHeight: 44,
               padding: "8px 15px",
               borderRadius: 999,
-              border: `1px solid ${INK.accent}`,
+              border: `1px solid ${DAY.accent}`,
               background: "transparent",
-              color: summaryBusy ? INK.textFaint : INK.accent,
+              color: summaryBusy ? DAY.textFaint : DAY.accent,
               fontWeight: 700,
               fontSize: 13,
               cursor: summaryBusy ? "wait" : "pointer",
@@ -237,8 +238,8 @@ ${referenceHtml()}
               padding: "8px 15px",
               borderRadius: 999,
               border: "none",
-              background: INK.text,
-              color: INK.page,
+              background: DAY.text,
+              color: DAY.page,
               fontWeight: 700,
               fontSize: 13,
               cursor: "pointer",
@@ -250,8 +251,8 @@ ${referenceHtml()}
             className="cw-mono"
             style={{
               fontSize: 13,
-              color: INK.textFaint,
-              border: `1px solid ${INK.line}`,
+              color: DAY.textFaint,
+              border: `1px solid ${DAY.line}`,
               borderRadius: 999,
               padding: "4px 11px",
             }}
@@ -265,8 +266,8 @@ ${referenceHtml()}
         <div
           style={{
             marginTop: 14,
-            background: INK.raised,
-            border: `1px solid ${INK.line}`,
+            background: DAY.raised,
+            border: `1px solid ${DAY.line}`,
             borderRadius: 10,
             padding: "13px 15px",
             fontSize: 13,
@@ -274,8 +275,8 @@ ${referenceHtml()}
             whiteSpace: "pre-wrap",
           }}
         >
-          <div className="cw-mono" style={{ fontSize: 13, color: INK.textFaint, marginBottom: 7, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <SourceTag kind="ai" tone="ink" />
+          <div className="cw-mono" style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 7, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <SourceTag kind="ai" tone="day" />
             総括
             {summaryMeta &&
               ` ── ${summaryMeta.servedModel} ／ ${(summaryMeta.latencyMs / 1000).toFixed(1)}s${summaryMeta.usage ? ` ／ out ${summaryMeta.usage.completion_tokens}tok` : ""}`}
@@ -288,14 +289,14 @@ ${referenceHtml()}
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} data-plan-table>
           <tbody>
             {rows.map(([k, v], i) => (
-              <tr key={k} style={{ borderTop: i ? `1px solid ${INK.hairline}` : "none" }}>
+              <tr key={k} style={{ borderTop: i ? `1px solid ${DAY.hairline}` : "none" }}>
                 <th
                   scope="row"
                   style={{
                     textAlign: "left",
                     verticalAlign: "top",
                     padding: "10px 12px 10px 0",
-                    color: INK.textFaint,
+                    color: DAY.textFaint,
                     fontWeight: 500,
                     whiteSpace: "nowrap",
                     width: 84,
@@ -303,7 +304,7 @@ ${referenceHtml()}
                 >
                   {k}
                 </th>
-                <td style={{ padding: "10px 0", color: INK.text, lineHeight: 1.75 }}>{v}</td>
+                <td style={{ padding: "10px 0", color: DAY.text, lineHeight: 1.75 }}>{v}</td>
               </tr>
             ))}
           </tbody>
@@ -311,7 +312,7 @@ ${referenceHtml()}
 
         <div style={{ display: "grid", gap: 14 }}>
           <figure style={{ margin: 0 }} data-plan-map="crowd">
-            <figcaption style={{ fontSize: 13, color: INK.textFaint, marginBottom: 7 }}>
+            <figcaption style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 7 }}>
               配置図（混雑ピーク {plan.peakDensityHour}:00 時点・自動生成）
             </figcaption>
             <VenueMap
@@ -326,19 +327,21 @@ ${referenceHtml()}
                  opt-in なので来場者の地図（visitor-route.tsx・同じく compact）には影響しない */
               staffLabelInCompact
             />
-            <div style={{ display: "flex", gap: 14, marginTop: 9, fontSize: 13, color: INK.textDim, flexWrap: "wrap" }}>
+            {/* 凡例4色（給水/誘導/救護/受付）はLegendDotのドット塗りにのみ使用・文字色ではない
+                （§3-4: 塗りは対象外。実装確認済み） */}
+            <div style={{ display: "flex", gap: 14, marginTop: 9, fontSize: 13, color: DAY.textDim, flexWrap: "wrap" }}>
               <LegendDot color="#38BDF8" label="給水" />
               <LegendDot color="#FDE047" label="誘導" />
               <LegendDot color="#22C55E" label="救護" />
               <LegendDot color="#C4B5FD" label="受付" />
-              <span style={{ marginLeft: "auto", color: INK.textFaint }}>
+              <span style={{ marginLeft: "auto", color: DAY.textFaint }}>
                 最混雑 {densityBand(plan.peakDensity).label}
               </span>
             </div>
           </figure>
 
           <figure style={{ margin: 0 }} data-plan-map="heat">
-            <figcaption style={{ fontSize: 13, color: INK.textFaint, marginBottom: 7 }}>
+            <figcaption style={{ fontSize: 13, color: DAY.textFaint, marginBottom: 7 }}>
               暑熱・日陰図（暑熱ピーク {plan.peakWbgtHour}:00 時点・WBGT物理計算）
             </figcaption>
             <VenueMap
@@ -357,27 +360,27 @@ ${referenceHtml()}
         style={{
           marginTop: 20,
           paddingTop: 16,
-          borderTop: `1px solid ${INK.line}`,
+          borderTop: `1px solid ${DAY.line}`,
         }}
       >
-        <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: INK.text }}>
+        <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: DAY.text }}>
           人員規模の実務参照（注記）
         </h3>
-        <p style={{ margin: "0 0 12px", fontSize: 13, color: INK.textDim, lineHeight: 1.75 }}>
+        <p style={{ margin: "0 0 12px", fontSize: 13, color: DAY.textDim, lineHeight: 1.75 }}>
           上の配置計画は予報からの算出値。実務では以下の人数感を目安に、混み具合を見て兼任・増減する（現場ヒアリング 2026-08）
         </p>
         <div style={{ display: "grid", gap: 14, gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>
           {STAFFING_REFERENCE.map((g) => (
             <div key={g.group}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: INK.textFaint, marginBottom: 5 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: DAY.textFaint, marginBottom: 5 }}>
                 {g.group}
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <tbody>
                   {g.items.map((it) => (
-                    <tr key={it.label} style={{ borderTop: `1px solid ${INK.hairline}` }}>
-                      <td style={{ padding: "6px 12px 6px 0", color: INK.text }}>{it.label}</td>
-                      <td style={{ padding: "6px 0", color: INK.text, textAlign: "right" }} className="cw-mono">
+                    <tr key={it.label} style={{ borderTop: `1px solid ${DAY.hairline}` }}>
+                      <td style={{ padding: "6px 12px 6px 0", color: DAY.text }}>{it.label}</td>
+                      <td style={{ padding: "6px 0", color: DAY.text, textAlign: "right" }} className="cw-mono">
                         {it.count}
                       </td>
                     </tr>
@@ -385,14 +388,14 @@ ${referenceHtml()}
                 </tbody>
               </table>
               {g.note && (
-                <div style={{ marginTop: 4, fontSize: 13, color: INK.textFaint }}>{g.note}</div>
+                <div style={{ marginTop: 4, fontSize: 13, color: DAY.textFaint }}>{g.note}</div>
               )}
             </div>
           ))}
         </div>
       </div>
 
-      <p style={{ marginTop: 16, marginBottom: 0, fontSize: 13, color: INK.textFaint, lineHeight: 1.75 }}>
+      <p style={{ marginTop: 16, marginBottom: 0, fontSize: 13, color: DAY.textFaint, lineHeight: 1.75 }}>
         「印刷 / PDF保存」で手元にファイルが残る（ブラウザの印刷機能を使用）。
         会場ごとの実績を学習し、2会場目以降の初期設定コストを下げる。
       </p>

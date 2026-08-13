@@ -8,8 +8,8 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: #0a0e17;
-  color: #e8eef9;
+  background: #eef1f7;
+  color: #0b111f;
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "palt" 1; /* 和文の詰め。数字は等幅のまま */
@@ -26,7 +26,7 @@ button {
 
 /* キーボード操作でフォーカスが見えること */
 :focus-visible {
-  outline: 2px solid #7dd3fc;
+  outline: 2px solid #0b5c8c;
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -37,7 +37,7 @@ input[type="range"] {
   width: 100%;
   height: 3px;
   border-radius: 999px;
-  background: #243149;
+  background: #c9d2e4;
   outline: none;
 }
 input[type="range"]::-webkit-slider-thumb {
@@ -45,17 +45,17 @@ input[type="range"]::-webkit-slider-thumb {
   width: 17px;
   height: 17px;
   border-radius: 50%;
-  background: #e8eef9;
-  border: 4px solid #0a0e17;
-  box-shadow: 0 0 0 1px #243149;
+  background: #0b111f;
+  border: 4px solid #ffffff;
+  box-shadow: 0 0 0 1px #c9d2e4;
   cursor: pointer;
 }
 input[type="range"]::-moz-range-thumb {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  background: #e8eef9;
-  border: 4px solid #0a0e17;
+  background: #0b111f;
+  border: 4px solid #ffffff;
   cursor: pointer;
 }
 

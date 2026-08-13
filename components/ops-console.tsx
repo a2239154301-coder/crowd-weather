@@ -9,7 +9,8 @@ import HourlyStrip from "./hourly-strip";
 import ZoneTimeline from "./zone-timeline";
 import ArrivalList from "./arrival-list";
 import EntryPeak from "./entry-peak";
-import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
+import { densityBand, wbgtBand } from "@/lib/forecast/scales";
+import { DAY } from "@/lib/ui/day-theme";
 import { arrivalOrder, venuePeakHour, zoneRisks } from "@/lib/forecast/risk";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
 import VenueMap, { type MapLayer, type StaffMark } from "./venue-map";
@@ -314,38 +315,39 @@ export default function OpsConsole() {
           gap: 14,
           flexWrap: "wrap",
           padding: "11px 16px",
-          background: INK.surface,
-          border: `1px solid ${INK.line}`,
+          background: DAY.surface,
+          border: `1px solid ${DAY.line}`,
           borderLeft: `3px solid ${dayBand.color}`,
           borderRadius: 12,
         }}
       >
         <div>
-          <div style={{ fontSize: 13, color: INK.textFaint, letterSpacing: 1 }}>本日の最大警戒</div>
+          <div style={{ fontSize: 13, color: DAY.textFaint, letterSpacing: 1 }}>本日の最大警戒</div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 2 }}>
-            <span style={{ fontSize: 19, fontWeight: 700, color: dayBand.color }}>
+            {/* 段階色は左の帯（borderLeft）で示す。文字は墨色（§3-4: 白地でdayBand.colorは軒並み4.5:1未満） */}
+            <span style={{ fontSize: 19, fontWeight: 700, color: DAY.text }}>
               混雑 {dayBand.label}
             </span>
-            <span className="cw-mono" style={{ fontSize: 13, color: INK.textDim }}>
+            <span className="cw-mono" style={{ fontSize: 13, color: DAY.textDim }}>
               {plan.peakDensity} / {plan.peakDensityHour}:00 {plan.peakDensityZone.name}
             </span>
           </div>
         </div>
-        <div style={{ width: 1, height: 32, background: INK.line }} />
+        <div style={{ width: 1, height: 32, background: DAY.line }} />
         <div>
-          <div style={{ fontSize: 13, color: INK.textFaint, letterSpacing: 1 }}>暑熱</div>
+          <div style={{ fontSize: 13, color: DAY.textFaint, letterSpacing: 1 }}>暑熱</div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 2 }}>
-            <span style={{ fontSize: 19, fontWeight: 700, color: heatBand.color }}>{heatBand.label}</span>
-            <span className="cw-mono" style={{ fontSize: 13, color: INK.textDim }}>
+            <span style={{ fontSize: 19, fontWeight: 700, color: DAY.text }}>{heatBand.label}</span>
+            <span className="cw-mono" style={{ fontSize: 13, color: DAY.textDim }}>
               WBGT {plan.peakWbgt} / {plan.peakWbgtHour}:00
             </span>
           </div>
         </div>
         <div style={{ marginLeft: "auto", textAlign: "right" }}>
-          <div style={{ fontSize: 13, color: INK.textFaint }}>
+          <div style={{ fontSize: 13, color: DAY.textFaint }}>
             {VENUE.name} ／ {scenario.geo.name}
           </div>
-          <div className="cw-mono" style={{ fontSize: 19, fontWeight: 600, color: INK.text }}>
+          <div className="cw-mono" style={{ fontSize: 19, fontWeight: 600, color: DAY.text }}>
             {hour}:00
           </div>
         </div>
@@ -377,9 +379,9 @@ export default function OpsConsole() {
                     minWidth: 0,
                     padding: "8px 11px",
                     borderRadius: 8,
-                    border: `1px solid ${INK.line}`,
-                    background: INK.raised,
-                    color: INK.text,
+                    border: `1px solid ${DAY.line}`,
+                    background: DAY.raised,
+                    color: DAY.text,
                     fontSize: 13,
                   }}
                 />
@@ -390,9 +392,9 @@ export default function OpsConsole() {
                     minHeight: 44,
                     padding: "8px 13px",
                     borderRadius: 8,
-                    border: `1px solid ${INK.line}`,
+                    border: `1px solid ${DAY.line}`,
                     background: "transparent",
-                    color: placeBusy ? INK.textFaint : INK.text,
+                    color: placeBusy ? DAY.textFaint : DAY.text,
                     fontWeight: 600,
                     fontSize: 13,
                     cursor: placeBusy ? "wait" : "pointer",
@@ -403,9 +405,10 @@ export default function OpsConsole() {
                 </button>
               </div>
               {placeError && (
-                <div style={{ marginTop: 6, fontSize: 13, color: "#FCA5A5" }}>{placeError}</div>
+                // §5-2b: 暗色地用の #FCA5A5（白地1.69:1）→ DAY.danger（白地6.85:1）
+                <div style={{ marginTop: 6, fontSize: 13, color: DAY.danger }}>{placeError}</div>
               )}
-              <div className="cw-mono" style={{ marginTop: 6, fontSize: 13, color: INK.textFaint }}>
+              <div className="cw-mono" style={{ marginTop: 6, fontSize: 13, color: DAY.textFaint }}>
                 {scenario.geo.lat.toFixed(3)}°N {scenario.geo.lon.toFixed(3)}°E ／ 実況取得と太陽位置に反映
               </div>
             </Field>
@@ -419,9 +422,9 @@ export default function OpsConsole() {
                 minHeight: 44,
                 padding: "10px 0",
                 borderRadius: 9,
-                border: `1px solid ${INK.accent}`,
+                border: `1px solid ${DAY.accent}`,
                 background: "transparent",
-                color: INK.accent,
+                color: DAY.accent,
                 fontWeight: 700,
                 fontSize: 13,
                 cursor: liveBusy ? "wait" : "pointer",
@@ -432,13 +435,14 @@ export default function OpsConsole() {
             {liveAt && liveAt !== "error" && (
               <div
                 className="cw-mono"
-                style={{ marginTop: -8, marginBottom: 10, fontSize: 13, color: "#22C55E" }}
+                // §5-2b: 暗色地用の #22C55E（白地2.28:1）→ 既存の「一次確認済み」成功色 #0F6E56（白地6.20:1）を再利用
+                style={{ marginTop: -8, marginBottom: 10, fontSize: 13, color: "#0F6E56" }}
               >
                 LIVE {scenario.date.label} {liveAt} 時点の実況（Open-Meteo）を反映中
               </div>
             )}
             {liveAt === "error" && (
-              <div style={{ marginTop: -8, marginBottom: 10, fontSize: 13, color: "#FCA5A5" }}>
+              <div style={{ marginTop: -8, marginBottom: 10, fontSize: 13, color: DAY.danger }}>
                 実況を取得できませんでした（手入力の値のまま）
               </div>
             )}
@@ -457,9 +461,9 @@ export default function OpsConsole() {
                       fontSize: 13,
                       fontWeight: 600,
                       cursor: "pointer",
-                      border: `1px solid ${scenario.weather === w ? INK.accent : INK.line}`,
-                      background: scenario.weather === w ? INK.accent : "transparent",
-                      color: scenario.weather === w ? INK.page : INK.textDim,
+                      border: `1px solid ${scenario.weather === w ? DAY.accent : DAY.line}`,
+                      background: scenario.weather === w ? DAY.accent : "transparent",
+                      color: scenario.weather === w ? DAY.page : DAY.textDim,
                     }}
                   >
                     {WEATHER_GLYPH[w]} {WEATHER_LABEL[w]}
@@ -470,7 +474,8 @@ export default function OpsConsole() {
             <Field
               label="予想最高気温"
               value={`${scenario.temp}℃`}
-              valueColor={scenario.temp >= 33 ? "#EF4444" : INK.text}
+              // §5-2b: 暗色地用の #EF4444（白地3.76:1・AA未達）→ DAY.danger（白地6.85:1）
+              valueColor={scenario.temp >= 33 ? DAY.danger : DAY.text}
             >
               <input
                 type="range"
@@ -516,7 +521,7 @@ export default function OpsConsole() {
             </Field>
             <div
               className="cw-mono"
-              style={{ fontSize: 13, color: INK.textFaint, display: "flex", justifyContent: "space-between" }}
+              style={{ fontSize: 13, color: DAY.textFaint, display: "flex", justifyContent: "space-between" }}
             >
               <span>開催日 {scenario.date.label}</span>
               <span>WBGT=湿球黒球の物理計算（湿度・風が効く）</span>
@@ -541,7 +546,7 @@ export default function OpsConsole() {
                   <div
                     key={t.zoneId}
                     className="cw-mono"
-                    style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: INK.textDim }}
+                    style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: DAY.textDim }}
                   >
                     <span>{t.zoneName}</span>
                     <span>
@@ -549,7 +554,7 @@ export default function OpsConsole() {
                     </span>
                   </div>
                 ))}
-                <div style={{ fontSize: 13, color: INK.textFaint, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 13, color: DAY.textFaint, lineHeight: 1.6 }}>
                   WBGT28以上なのに日陰6割未満の待機ゾーンに、3×6mテントの必要枚数を提案（馬場v4）
                 </div>
               </div>
@@ -559,19 +564,20 @@ export default function OpsConsole() {
               style={{
                 marginTop: 13,
                 paddingTop: 12,
-                borderTop: `1px solid ${INK.hairline}`,
+                borderTop: `1px solid ${DAY.hairline}`,
               }}
             >
-              <div style={{ fontSize: 13, color: INK.textDim }}>厚く置く → 賢く置く</div>
+              <div style={{ fontSize: 13, color: DAY.textDim }}>厚く置く → 賢く置く</div>
               <div className="cw-mono" style={{ marginTop: 4, fontSize: 15 }}>
-                <span style={{ color: INK.textFaint, textDecoration: "line-through" }}>
+                <span style={{ color: DAY.textFaint, textDecoration: "line-through" }}>
                   {plan.baselinePersonHours}
                 </span>
-                <span style={{ color: INK.textFaint }}> → </span>
-                <span style={{ color: INK.text, fontWeight: 700 }}>{plan.optimizedPersonHours}人時</span>
-                <span style={{ color: "#22C55E", fontWeight: 700 }}> −{plan.savedPercent}%</span>
+                <span style={{ color: DAY.textFaint }}> → </span>
+                <span style={{ color: DAY.text, fontWeight: 700 }}>{plan.optimizedPersonHours}人時</span>
+                {/* §5-2b: 暗色地用の #22C55E（白地2.28:1）→ 既存の成功色 #0F6E56（白地6.20:1）を再利用 */}
+                <span style={{ color: "#0F6E56", fontWeight: 700 }}> −{plan.savedPercent}%</span>
               </div>
-              <div style={{ fontSize: 13, color: INK.textFaint, marginTop: 3, lineHeight: 1.6 }}>
+              <div style={{ fontSize: 13, color: DAY.textFaint, marginTop: 3, lineHeight: 1.6 }}>
                 一律増員をやめ、ピーク時間帯と危険エリアに寄せた場合の1イベント試算
               </div>
             </div>
@@ -586,8 +592,8 @@ export default function OpsConsole() {
               style={{
                 fontSize: 13,
                 fontWeight: 600,
-                color: INK.textDim,
-                border: `1px solid ${INK.line}`,
+                color: DAY.textDim,
+                border: `1px solid ${DAY.line}`,
                 borderRadius: 9,
                 padding: "9px 13px",
               }}
@@ -611,9 +617,9 @@ export default function OpsConsole() {
                 minHeight: 44,
                 padding: "0 14px",
                 borderRadius: 9,
-                border: `1px solid ${INK.line}`,
-                background: INK.surface,
-                color: INK.textDim,
+                border: `1px solid ${DAY.line}`,
+                background: DAY.surface,
+                color: DAY.textDim,
                 fontSize: 13,
                 fontWeight: 600,
                 textDecoration: "none",
@@ -661,15 +667,15 @@ export default function OpsConsole() {
           {/* ── AIアドバイザー ─────────────────────── */}
           <div
             style={{
-              background: INK.surface,
-              border: `1px solid ${INK.line}`,
+              background: DAY.surface,
+              border: `1px solid ${DAY.line}`,
               borderRadius: 12,
               padding: 16,
             }}
           >
             <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 220 }}>
-                <div style={{ fontSize: 13, letterSpacing: 1.5, color: INK.textFaint }}>
+                <div style={{ fontSize: 13, letterSpacing: 1.5, color: DAY.textFaint }}>
                   AI OPERATIONS ADVISOR — OrcaRouter
                 </div>
                 <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>
@@ -686,8 +692,8 @@ export default function OpsConsole() {
                       padding: "12px 22px",
                       borderRadius: 999,
                       border: "none",
-                      background: aiBusy ? INK.raised : INK.accent,
-                      color: aiBusy ? INK.textDim : INK.page,
+                      background: aiBusy ? DAY.raised : DAY.accent,
+                      color: aiBusy ? DAY.textDim : DAY.page,
                       fontWeight: 700,
                       fontSize: 15,
                       cursor: aiBusy ? "wait" : "pointer",
@@ -703,7 +709,7 @@ export default function OpsConsole() {
                     alignItems: "center",
                     gap: 6,
                     fontSize: 13,
-                    color: INK.textDim,
+                    color: DAY.textDim,
                     cursor: "pointer",
                     userSelect: "none",
                   }}
@@ -722,8 +728,8 @@ export default function OpsConsole() {
               <div
                 style={{
                   marginTop: 13,
-                  background: INK.raised,
-                  border: `1px solid ${INK.line}`,
+                  background: DAY.raised,
+                  border: `1px solid ${DAY.line}`,
                   borderRadius: 10,
                   padding: "13px 15px",
                   fontSize: 13,
@@ -732,9 +738,9 @@ export default function OpsConsole() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 7 }}>
-                  <SourceTag kind="ai" tone="ink" />
+                  <SourceTag kind="ai" tone="day" />
                   {adviceLabel && (
-                    <span className="cw-mono" style={{ fontSize: 13, color: INK.textFaint }}>
+                    <span className="cw-mono" style={{ fontSize: 13, color: DAY.textFaint }}>
                       {adviceLabel}
                       {easyStyle ? "・やさしい日本語" : ""}
                     </span>
@@ -754,7 +760,7 @@ export default function OpsConsole() {
                   gap: 7,
                   alignItems: "center",
                   fontSize: 13,
-                  color: INK.textFaint,
+                  color: DAY.textFaint,
                 }}
               >
                 <span>処理したモデル</span>
@@ -781,15 +787,15 @@ export default function OpsConsole() {
               style={{
                 marginTop: 13,
                 paddingTop: 12,
-                borderTop: `1px solid ${INK.hairline}`,
+                borderTop: `1px solid ${DAY.hairline}`,
                 display: "flex",
                 alignItems: "center",
                 gap: 12,
                 flexWrap: "wrap",
               }}
             >
-              <div style={{ flex: 1, minWidth: 220, fontSize: 13, color: INK.textDim, lineHeight: 1.7 }}>
-                <b style={{ color: INK.text }}>2系統ブリーフィング</b> — 同じ予報を「責任者（上位モデル）／スタッフ（軽量）」へ並列に書き分ける。
+              <div style={{ flex: 1, minWidth: 220, fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
+                <b style={{ color: DAY.text }}>2系統ブリーフィング</b> — 同じ予報を「責任者（上位モデル）／スタッフ（軽量）」へ並列に書き分ける。
               </div>
               <button
                 onClick={askBriefings}
@@ -798,9 +804,9 @@ export default function OpsConsole() {
                   minHeight: 44,
                   padding: "9px 16px",
                   borderRadius: 999,
-                  border: `1px solid ${INK.line}`,
+                  border: `1px solid ${DAY.line}`,
                   background: "transparent",
-                  color: briefBusy ? INK.textFaint : INK.text,
+                  color: briefBusy ? DAY.textFaint : DAY.text,
                   fontWeight: 700,
                   fontSize: 13,
                   cursor: briefBusy ? "wait" : "pointer",
@@ -826,8 +832,8 @@ export default function OpsConsole() {
                     <div
                       key={key}
                       style={{
-                        background: INK.raised,
-                        border: `1px solid ${INK.line}`,
+                        background: DAY.raised,
+                        border: `1px solid ${DAY.line}`,
                         borderTop: `2px solid ${color}`,
                         borderRadius: 10,
                         padding: "11px 12px",
@@ -837,14 +843,16 @@ export default function OpsConsole() {
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color }}>{label}</span>
-                        <SourceTag kind="ai" tone="ink" />
+                        {/* §1-3 パターン3の既知例（責任者向け#C4B5FD=白地1.85:1／スタッフ向け#7DD3FC=白地1.67:1・
+                            いずれも判読不能）。色は上のborderTopの帯で示し、文字は墨色にする */}
+                        <span style={{ fontSize: 13, fontWeight: 700, color: DAY.text }}>{label}</span>
+                        <SourceTag kind="ai" tone="day" />
                       </div>
                       <div style={{ fontSize: 13, lineHeight: 1.8, whiteSpace: "pre-wrap", flex: 1 }}>
                         {b?.text}
                       </div>
                       {b?.meta && (
-                        <div className="cw-mono" style={{ fontSize: 13, color: INK.textFaint }}>
+                        <div className="cw-mono" style={{ fontSize: 13, color: DAY.textFaint }}>
                           {b.meta.servedModel} ／ {(b.meta.latencyMs / 1000).toFixed(1)}s
                           {b.meta.usage ? ` ／ out ${b.meta.usage.completion_tokens}tok` : ""}
                           {` ／ ${formatYen(costYenForMeta(b.meta))}`}
@@ -860,16 +868,16 @@ export default function OpsConsole() {
           {/* ── What-if 自然言語シナリオ ─────────────── */}
           <div
             style={{
-              background: INK.surface,
-              border: `1px solid ${INK.line}`,
+              background: DAY.surface,
+              border: `1px solid ${DAY.line}`,
               borderRadius: 12,
               padding: 16,
             }}
           >
-            <div style={{ fontSize: 13, letterSpacing: 1.5, color: INK.textFaint }}>
+            <div style={{ fontSize: 13, letterSpacing: 1.5, color: DAY.textFaint }}>
               WHAT-IF — 言葉でシナリオを動かす
             </div>
-            <div style={{ fontSize: 13, color: INK.textDim, marginTop: 5, lineHeight: 1.7 }}>
+            <div style={{ fontSize: 13, color: DAY.textDim, marginTop: 5, lineHeight: 1.7 }}>
               「もし17時に雷雨が来たら？」— AIは条件変更に<b>翻訳するだけ</b>。数字は計算エンジンが出し直す。
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
@@ -882,9 +890,9 @@ export default function OpsConsole() {
                   flex: 1,
                   padding: "10px 13px",
                   borderRadius: 9,
-                  border: `1px solid ${INK.line}`,
-                  background: INK.raised,
-                  color: INK.text,
+                  border: `1px solid ${DAY.line}`,
+                  background: DAY.raised,
+                  color: DAY.text,
                   fontSize: 13,
                 }}
               />
@@ -896,8 +904,8 @@ export default function OpsConsole() {
                   padding: "10px 18px",
                   borderRadius: 9,
                   border: "none",
-                  background: whatifBusy ? INK.raised : INK.accent,
-                  color: whatifBusy ? INK.textDim : INK.page,
+                  background: whatifBusy ? DAY.raised : DAY.accent,
+                  color: whatifBusy ? DAY.textDim : DAY.page,
                   fontWeight: 700,
                   fontSize: 13,
                   cursor: whatifBusy ? "wait" : "pointer",
@@ -909,12 +917,12 @@ export default function OpsConsole() {
             </div>
 
             {whatifError && (
-              <div style={{ marginTop: 9, fontSize: 13, color: "#FCA5A5" }}>{whatifError}</div>
+              <div style={{ marginTop: 9, fontSize: 13, color: DAY.danger }}>{whatifError}</div>
             )}
 
             {whatif && (
               <div style={{ marginTop: 11 }}>
-                <div style={{ fontSize: 13, color: INK.textDim, lineHeight: 1.7 }}>
+                <div style={{ fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
                   解釈: {whatif.interpretation}
                 </div>
                 {whatif.feasible && whatifPlan && (
@@ -970,9 +978,9 @@ export default function OpsConsole() {
                       minHeight: 44,
                       padding: "8px 15px",
                       borderRadius: 999,
-                      border: `1px solid ${INK.line}`,
+                      border: `1px solid ${DAY.line}`,
                       background: "transparent",
-                      color: INK.text,
+                      color: DAY.text,
                       fontWeight: 600,
                       fontSize: 13,
                       cursor: "pointer",
@@ -981,7 +989,7 @@ export default function OpsConsole() {
                     この条件を画面全体に適用する
                   </button>
                 )}
-                <div className="cw-mono" style={{ marginTop: 8, fontSize: 13, color: INK.textFaint }}>
+                <div className="cw-mono" style={{ marginTop: 8, fontSize: 13, color: DAY.textFaint }}>
                   解釈: {whatif.meta.servedModel} ／ {(whatif.meta.latencyMs / 1000).toFixed(1)}s ／{" "}
                   {formatYen(costYenForMeta(whatif.meta))} ／ 再計算: エンジン（LLM不使用・¥0）
                 </div>
@@ -992,7 +1000,7 @@ export default function OpsConsole() {
       </div>
 
       {/* ── 入場が混む時間帯（ゲート待ち行列予測） ── */}
-      <EntryPeak tickets={scenario.tickets} tone="ink" />
+      <EntryPeak tickets={scenario.tickets} tone="day" />
 
       {/* ── ゾーン別 危険度（どこが、いつ、危険になるか） ── */}
       <ZoneTimeline zones={zones} scenario={scenario} hour={hour} onHourChange={setHour} />
@@ -1027,26 +1035,28 @@ function DeltaStat({
 }) {
   const worse = after > before;
   const same = after === before;
-  const color = same ? INK.textDim : worse ? "#FB7A1E" : "#22C55E";
+  // §5-2b: 暗色地用の #FB7A1E（白地2.26:1）／#22C55E（白地2.28:1）は判読不能。
+  // #B45309（悪化・二次資料色の白地5.02:1）／#0F6E56（改善・成功色の白地6.20:1）を再利用
+  const color = same ? DAY.textDim : worse ? "#B45309" : "#0F6E56";
   return (
     <div
       style={{
-        background: INK.raised,
-        border: `1px solid ${INK.line}`,
+        background: DAY.raised,
+        border: `1px solid ${DAY.line}`,
         borderRadius: 10,
         padding: "10px 12px",
       }}
     >
-      <div style={{ fontSize: 13, color: INK.textFaint }}>{label}</div>
+      <div style={{ fontSize: 13, color: DAY.textFaint }}>{label}</div>
       <div className="cw-mono" style={{ marginTop: 4, fontSize: 15 }}>
-        <span style={{ color: INK.textDim }}>{before}</span>
-        <span style={{ color: INK.textFaint }}> → </span>
+        <span style={{ color: DAY.textDim }}>{before}</span>
+        <span style={{ color: DAY.textFaint }}> → </span>
         <span style={{ color, fontWeight: 700 }}>
           {after}
           {unit}
         </span>
       </div>
-      <div style={{ fontSize: 13, color: INK.textFaint, marginTop: 2 }}>{sub}</div>
+      <div style={{ fontSize: 13, color: DAY.textFaint, marginTop: 2 }}>{sub}</div>
     </div>
   );
 }
@@ -1055,10 +1065,10 @@ function DeltaStat({
 
 function Card({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: INK.surface, border: `1px solid ${INK.line}`, borderRadius: 12, padding: 15 }}>
+    <div style={{ background: DAY.surface, border: `1px solid ${DAY.line}`, borderRadius: 12, padding: 15 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, letterSpacing: 0.4 }}>{title}</h2>
-        {note && <span style={{ fontSize: 13, color: INK.textFaint }}>{note}</span>}
+        {note && <span style={{ fontSize: 13, color: DAY.textFaint }}>{note}</span>}
       </div>
       {children}
     </div>
@@ -1079,9 +1089,9 @@ function Field({
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
-        <span style={{ fontSize: 13, color: INK.textDim }}>{label}</span>
+        <span style={{ fontSize: 13, color: DAY.textDim }}>{label}</span>
         {value && (
-          <span className="cw-mono" style={{ fontSize: 13, fontWeight: 600, color: valueColor ?? INK.text }}>
+          <span className="cw-mono" style={{ fontSize: 13, fontWeight: 600, color: valueColor ?? DAY.text }}>
             {value}
           </span>
         )}
@@ -1091,15 +1101,19 @@ function Field({
   );
 }
 
+/**
+ * カラーコード付きラベルチップ。§1-3 パターン2: 背景アルファを 1A(10%) → 26(15%) へ引き上げ、
+ * 文字色は常に墨色（DAY.text）にする（渡ってくる生hexは暗色地向けのため、白地で軒並み4.5:1未満）。
+ */
 function Chip({ color, children }: { color: string; children: React.ReactNode }) {
   return (
     <span
       style={{
         fontSize: 13,
         fontWeight: 600,
-        color,
-        background: `${color}1A`,
-        border: `1px solid ${color}55`,
+        color: DAY.text,
+        background: `${color}26`,
+        border: `1px solid ${color}66`,
         borderRadius: 999,
         padding: "4px 10px",
         whiteSpace: "nowrap",
@@ -1120,7 +1134,7 @@ function Toggle({
   onChange: (v: string) => void;
 }) {
   return (
-    <div style={{ display: "flex", gap: 3, background: INK.surface, border: `1px solid ${INK.line}`, borderRadius: 9, padding: 3 }}>
+    <div style={{ display: "flex", gap: 3, background: DAY.surface, border: `1px solid ${DAY.line}`, borderRadius: 9, padding: 3 }}>
       {options.map(([k, l]) => (
         <button
           key={k}
@@ -1134,9 +1148,9 @@ function Toggle({
             cursor: "pointer",
             fontSize: 13,
             fontWeight: 600,
-            background: value === k ? INK.raised : "transparent",
-            color: value === k ? INK.text : INK.textDim,
-            boxShadow: value === k ? `inset 0 0 0 1px ${INK.line}` : "none",
+            background: value === k ? DAY.raised : "transparent",
+            color: value === k ? DAY.text : DAY.textDim,
+            boxShadow: value === k ? `inset 0 0 0 1px ${DAY.line}` : "none",
           }}
         >
           {l}
@@ -1154,7 +1168,7 @@ function Legend({ layer }: { layer: MapLayer }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto", flexWrap: "wrap" }}>
       {bands.map((b) => (
-        <span key={b.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: INK.textDim }}>
+        <span key={b.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: DAY.textDim }}>
           <span style={{ width: 11, height: 11, borderRadius: 3, background: b.color, display: "inline-block" }} />
           {b.label}
         </span>
@@ -1169,10 +1183,13 @@ function Legend({ layer }: { layer: MapLayer }) {
  */
 function Stat({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
-    <div style={{ background: INK.surface, border: `1px solid ${INK.line}`, borderRadius: 11, padding: "11px 13px" }}>
-      <div style={{ fontSize: 13, color: INK.textFaint }}>{label}</div>
-      <div style={{ fontSize: 15, fontWeight: 700, marginTop: 3, color: INK.text }}>{value}</div>
-      <div className="cw-mono" style={{ fontSize: 13, color, marginTop: 2 }}>
+    <div style={{ background: DAY.surface, border: `1px solid ${DAY.line}`, borderRadius: 11, padding: "11px 13px" }}>
+      <div style={{ fontSize: 13, color: DAY.textFaint }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, marginTop: 3, color: DAY.text }}>{value}</div>
+      {/* §5-2b: 呼び出し側は段階色／生hexを渡すため（白地で軒並み4.5:1未満）、
+          文字は墨色にし色は左の小さなドットへ移す（§3-4の規約どおり） */}
+      <div className="cw-mono" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: DAY.textDim, marginTop: 2 }}>
+        <span style={{ width: 7, height: 7, borderRadius: 999, background: color, flex: "none" }} />
         {sub}
       </div>
     </div>

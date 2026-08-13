@@ -2,6 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { Database, Zap, Lock } from "lucide-react";
+import { DAY } from "@/lib/ui/day-theme";
 
 /**
  * 審査モードの「データ設計」パネル。
@@ -9,16 +10,17 @@ import { Database, Zap, Lock } from "lucide-react";
  * `components/crowd-weather.tsx` から `DataView` だけを切り出した（再設計 §2-6）。
  * モデル層（`lib/forecast/**`）には一切触れておらず、下記の私有パレット `C` と
  * 2つのヘルパーだけで自己完結する。
+ *
+ * 2026-08-14、明色化（再設計 §3-3）。私有パレットのうち構造色6キー
+ * （panel/panel2/deep/line/faint/muted）は `DAY` トークンへ置換。
+ * 意味色4キー（heat/busy/caution/cool）はそのまま保持するが、
+ * 白地での文字色としては不合格（例: busy #FB923C は白地2.26:1）なので、
+ * `Feed` の実装は「文字は墨色（DAY.text）・意味色は左のドットへ」に変更した
+ * （§3-4 と同じ「段階色を文字色に使わない」原則）。
  */
 
-// ---- design tokens（旧 crowd-weather.tsx の私有パレット。DataView が使う10キーのみ移設） ----
+// ---- design tokens（旧 crowd-weather.tsx の私有パレット。意味色4キーのみ残す） ----
 const C = {
-  panel: "#121A30",
-  panel2: "#0F1728",
-  deep: "#0B1120",
-  line: "#22304F",
-  faint: "#5C6A8C",
-  muted: "#8695B8",
   cool: "#38BDF8",
   caution: "#FBBF24",
   busy: "#FB923C",
@@ -27,12 +29,12 @@ const C = {
 const mono = "'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace";
 
 const Panel = ({ children, style }: { children?: ReactNode; style?: CSSProperties }) => (
-  <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 16, ...style }}>
+  <div style={{ background: DAY.surface, border: `1px solid ${DAY.line}`, borderRadius: 16, ...style }}>
     {children}
   </div>
 );
 const Eyebrow = ({ children }: { children?: ReactNode }) => (
-  <div style={{ fontFamily: mono, fontSize: 13, letterSpacing: 2, color: C.faint, textTransform: "uppercase" }}>
+  <div style={{ fontFamily: mono, fontSize: 13, letterSpacing: 2, color: DAY.textFaint, textTransform: "uppercase" }}>
     {children}
   </div>
 );
@@ -54,25 +56,35 @@ export function DataView() {
     { n: "カメラ人流センシング", src: "自社センシング", feeds: ["混雑", "暑熱"] },
     { n: "来場者アプリ利用ログ", src: "CROWD WEATHER", feeds: ["混雑", "暑熱"], note: "予報精度を押し上げる実測" },
   ];
-  const Feed = ({ f }: { f: string }) => (
-    <span
-      style={{
-        fontFamily: mono,
-        fontSize: 13,
-        color: f === "混雑" ? C.busy : C.heat,
-        background: (f === "混雑" ? C.busy : C.heat) + "1A",
-        border: `1px solid ${(f === "混雑" ? C.busy : C.heat)}44`,
-        borderRadius: 99,
-        padding: "2px 8px",
-      }}
-    >
-      →{f}予測
-    </span>
-  );
+  const Feed = ({ f }: { f: string }) => {
+    const tone = f === "混雑" ? C.busy : C.heat;
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 5,
+          fontFamily: mono,
+          fontSize: 13,
+          color: DAY.text,
+          background: tone + "22",
+          border: `1px solid ${tone}44`,
+          borderRadius: 99,
+          padding: "2px 8px",
+        }}
+      >
+        <span
+          aria-hidden
+          style={{ width: 6, height: 6, borderRadius: "50%", background: tone, flexShrink: 0 }}
+        />
+        →{f}予測
+      </span>
+    );
+  };
   const Card = ({ d }: { d: { n: string; src: string; feeds: string[]; note?: string } }) => (
-    <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px" }}>
-      <div style={{ fontWeight: 700, fontSize: 13 }}>{d.n}</div>
-      <div style={{ fontFamily: mono, fontSize: 13, color: C.faint, margin: "3px 0 7px" }}>
+    <div style={{ background: DAY.raised, border: `1px solid ${DAY.line}`, borderRadius: 12, padding: "12px 14px" }}>
+      <div style={{ fontWeight: 700, fontSize: 13, color: DAY.text }}>{d.n}</div>
+      <div style={{ fontFamily: mono, fontSize: 13, color: DAY.textFaint, margin: "3px 0 7px" }}>
         {d.src}
         {d.note ? ` ── ${d.note}` : ""}
       </div>
@@ -96,7 +108,7 @@ export function DataView() {
             <Card key={i} d={d} />
           ))}
         </div>
-        <div style={{ marginTop: 12, fontFamily: mono, fontSize: 13, color: C.faint, lineHeight: 1.7 }}>
+        <div style={{ marginTop: 12, fontFamily: mono, fontSize: 13, color: DAY.textFaint, lineHeight: 1.7 }}>
           ※ 3D都市モデルの活用は、2024年度都知事杯受賞作「高解像度熱中症リスクマップ」の系譜。本デモの日陰計算はその簡略版。
         </div>
       </Panel>
@@ -114,8 +126,8 @@ export function DataView() {
         <div
           style={{
             marginTop: 12,
-            background: C.deep,
-            border: `1px dashed ${C.line}`,
+            background: DAY.page,
+            border: `1px dashed ${DAY.line}`,
             borderRadius: 11,
             padding: "11px 13px",
             display: "flex",
@@ -123,7 +135,7 @@ export function DataView() {
           }}
         >
           <Lock size={14} color={C.caution} style={{ flexShrink: 0, marginTop: 2 }} />
-          <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.7 }}>
+          <div style={{ fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
             民間イベントデータは、主催者との信頼関係がなければ集まらない。イベント制作の当事者である私たち自身が「データの持ち込み手」——ここが最大の参入障壁になる。
           </div>
         </div>

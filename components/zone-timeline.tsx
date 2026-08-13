@@ -4,7 +4,8 @@ import { useMemo } from "react";
 import type { Scenario, Zone } from "@/lib/forecast/types";
 import { VENUE } from "@/lib/forecast/venue";
 import { forecastZones } from "@/lib/forecast/model";
-import { INK, WBGT_BANDS, wbgtBand } from "@/lib/forecast/scales";
+import { WBGT_BANDS, wbgtBand } from "@/lib/forecast/scales";
+import { DAY } from "@/lib/ui/day-theme";
 
 /**
  * ゾーン別 危険度タイムライン（馬場v4の Zone Timeline を移植・復活）。
@@ -52,8 +53,8 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
   return (
     <section
       style={{
-        background: INK.surface,
-        border: `1px solid ${INK.line}`,
+        background: DAY.surface,
+        border: `1px solid ${DAY.line}`,
         borderRadius: 14,
         padding: 16,
       }}
@@ -70,14 +71,14 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
         }}
       >
         <div>
-          <div className="cw-mono" style={{ fontSize: 13, letterSpacing: 1.5, color: INK.textFaint }}>
+          <div className="cw-mono" style={{ fontSize: 13, letterSpacing: 1.5, color: DAY.textFaint }}>
             ZONE TIMELINE ── ゾーン別 日陰率 × WBGT
           </div>
           <div style={{ fontWeight: 600, fontSize: 15, marginTop: 3 }}>ここが、いつ、危険になるか</div>
         </div>
         <div
           className="cw-mono"
-          style={{ display: "flex", gap: 12, fontSize: 13, color: INK.textFaint, flexWrap: "wrap" }}
+          style={{ display: "flex", gap: 12, fontSize: 13, color: DAY.textFaint, flexWrap: "wrap" }}
         >
           {WBGT_BANDS.map((b) => (
             <span key={b.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -107,7 +108,7 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
                 className="cw-mono"
                 style={{
                   fontSize: 13,
-                  color: h === hour ? INK.accent : INK.textFaint,
+                  color: h === hour ? DAY.accent : DAY.textFaint,
                   textAlign: "center",
                   fontWeight: h === hour ? 700 : 400,
                 }}
@@ -130,7 +131,7 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
               <div
                 style={{
                   fontSize: 13,
-                  color: INK.textDim,
+                  color: DAY.textDim,
                   paddingLeft: 4,
                   display: "flex",
                   alignItems: "center",
@@ -159,7 +160,7 @@ export default function ZoneTimeline({ zones, scenario, hour, onHourChange }: Pr
                       position: "relative",
                       padding: 0,
                       cursor: "pointer",
-                      outline: h === hour ? `1.5px solid ${INK.accent}` : "none",
+                      outline: h === hour ? `1.5px solid ${DAY.accent}` : "none",
                       overflow: "hidden",
                     }}
                   >

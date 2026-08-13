@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { INK } from "@/lib/forecast/scales";
+import { DAY } from "@/lib/ui/day-theme";
 import OpsConsole from "./ops-console";
 import IngestPanel from "./ingest-panel";
 import VisitorRoute from "./visitor-route";
@@ -75,7 +76,7 @@ function pick<T extends string>(raw: string | null, allowed: readonly T[], fallb
  */
 export default function AppShell() {
   return (
-    <Suspense fallback={<div style={{ minHeight: "100vh", background: INK.page }} />}>
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: DAY.page }} />}>
       <AppShellInner />
     </Suspense>
   );
@@ -137,7 +138,7 @@ function AppShellInner() {
 
   return (
     <ScenarioProvider>
-    <div style={{ minHeight: "100vh", background: INK.page, color: INK.text }}>
+    <div style={{ minHeight: "100vh", background: DAY.page, color: DAY.text }}>
       <style>{`
         @media (max-width: 900px) {
           .cw-split { grid-template-columns: 1fr !important; }
@@ -161,7 +162,7 @@ function AppShellInner() {
               <h1 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: 2 }}>
                 CROWD WEATHER
               </h1>
-              <span style={{ fontSize: 13, color: INK.textDim }}>混雑は、予報できる。</span>
+              <span style={{ fontSize: 13, color: DAY.textDim }}>混雑は、予報できる。</span>
             </div>
           </div>
 
@@ -231,8 +232,8 @@ function AppShellInner() {
                 style={{
                   display: "flex",
                   gap: 3,
-                  background: INK.surface,
-                  border: `1px solid ${INK.line}`,
+                  background: DAY.surface,
+                  border: `1px solid ${DAY.line}`,
                   borderRadius: 10,
                   padding: 3,
                 }}
@@ -250,9 +251,9 @@ function AppShellInner() {
                       cursor: "pointer",
                       fontSize: 13,
                       fontWeight: 600,
-                      background: view === k ? INK.raised : "transparent",
-                      color: view === k ? INK.text : INK.textDim,
-                      boxShadow: view === k ? `inset 0 0 0 1px ${INK.line}` : "none",
+                      background: view === k ? DAY.raised : "transparent",
+                      color: view === k ? DAY.text : DAY.textDim,
+                      boxShadow: view === k ? `inset 0 0 0 1px ${DAY.line}` : "none",
                     }}
                   >
                     {label}
@@ -275,8 +276,8 @@ function AppShellInner() {
                 style={{
                   display: "flex",
                   gap: 3,
-                  background: INK.surface,
-                  border: `1px solid ${INK.line}`,
+                  background: DAY.surface,
+                  border: `1px solid ${DAY.line}`,
                   borderRadius: 10,
                   padding: 3,
                 }}
@@ -301,16 +302,16 @@ function AppShellInner() {
                       cursor: "pointer",
                       fontSize: 13,
                       fontWeight: 600,
-                      background: liveView === k ? INK.raised : "transparent",
-                      color: liveView === k ? INK.text : INK.textDim,
-                      boxShadow: liveView === k ? `inset 0 0 0 1px ${INK.line}` : "none",
+                      background: liveView === k ? DAY.raised : "transparent",
+                      color: liveView === k ? DAY.text : DAY.textDim,
+                      boxShadow: liveView === k ? `inset 0 0 0 1px ${DAY.line}` : "none",
                     }}
                   >
                     {label}
                   </button>
                 ))}
               </nav>
-              <span style={{ fontSize: 13, color: INK.textFaint }}>
+              <span style={{ fontSize: 13, color: DAY.textFaint }}>
                 屋外・スマホ前提のため当日系の画面は明色
               </span>
             </div>
@@ -319,7 +320,7 @@ function AppShellInner() {
             {liveView === "board" && <StaffBoard />}
             {liveView === "staff" && (
               <>
-                <p style={{ margin: "0 0 14px", fontSize: 13, color: INK.textDim, lineHeight: 1.8 }}>
+                <p style={{ margin: "0 0 14px", fontSize: 13, color: DAY.textDim, lineHeight: 1.8 }}>
                   現場スタッフのスマホ画面。名前で入場し、配置ポストの指示を受け、
                   現地の混雑・暑さをワンタップで報告する。
                 </p>
@@ -331,7 +332,7 @@ function AppShellInner() {
 
         {mode === "judge" && (
           <>
-            <p style={{ margin: "0 0 14px", fontSize: 13, color: INK.textDim, lineHeight: 1.8 }}>
+            <p style={{ margin: "0 0 14px", fontSize: 13, color: DAY.textDim, lineHeight: 1.8 }}>
               審査員・技術説明のためのページ。運営者の業務画面からは分離している —
               データ設計（何を計算し、何をLLMに任せないか）・数値の出典・
               AIコストと安全対策をここにまとめて開示する。
@@ -350,7 +351,7 @@ function AppShellInner() {
               style={{
                 margin: "0 0 14px",
                 fontSize: 13,
-                color: INK.textDim,
+                color: DAY.textDim,
                 lineHeight: 1.8,
               }}
             >
@@ -365,13 +366,13 @@ function AppShellInner() {
           style={{
             marginTop: 26,
             paddingTop: 14,
-            borderTop: `1px solid ${INK.hairline}`,
+            borderTop: `1px solid ${DAY.hairline}`,
             display: "flex",
             justifyContent: "space-between",
             gap: 12,
             flexWrap: "wrap",
             fontSize: 13,
-            color: INK.textFaint,
+            color: DAY.textFaint,
           }}
         >
           <span>事故ゼロと、最高の体験は、両立できる。</span>

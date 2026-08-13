@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { INK } from "@/lib/forecast/scales";
+import { DAY } from "@/lib/ui/day-theme";
 import { ROUTING, type OrcaTask } from "@/lib/ai/orca";
 import { PRICES, USD_JPY, estimateEventCost, formatYen } from "@/lib/ai/pricing";
 
@@ -61,7 +61,7 @@ export default function TrustPanel() {
       >
         <p style={pStyle}>
           混雑指数・WBGT・日陰・リスク予報・経路探索（ダイクストラ法）・「なぜ」の根拠・
-          地図描画は<b style={{ color: INK.text }}>すべて決定的な計算で、LLM原価は¥0</b>。
+          地図描画は<b style={{ color: DAY.text }}>すべて決定的な計算で、LLM原価は¥0</b>。
           毎秒動く部分にLLMがいないので、来場者が増えてもAI原価は増えない。
           LLMは「非構造の資料を読む」「数値を人の言葉にする」「言葉を条件に翻訳する」の
           3系統だけに使う。
@@ -87,7 +87,7 @@ export default function TrustPanel() {
                   <td style={tdStyle}>{TASK_LABEL[task].label}</td>
                   <td style={tdStyle}>{TASK_LABEL[task].freq}</td>
                   <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{displayModel}</td>
-                  <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: INK.textDim }}>
+                  <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: DAY.textDim }}>
                     {r.fallbacks.join(" → ")}
                   </td>
                   <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>
@@ -98,7 +98,7 @@ export default function TrustPanel() {
             })}
           </tbody>
         </table>
-        <p style={{ ...pStyle, color: INK.textFaint, fontSize: 13 }}>
+        <p style={{ ...pStyle, color: DAY.textFaint, fontSize: 13 }}>
           モデル選定は9モデルの実測ベンチ（scripts/bench.mjs・2026-08-09）による。
           単価は各プロバイダの公表値（OrcaRouterはゼロマークアップ＝上乗せなし）。
         </p>
@@ -142,7 +142,7 @@ export default function TrustPanel() {
               <tr key={i}>
                 <td style={tdStyle}>{r.label}</td>
                 <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{r.calls}</td>
-                <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: INK.textDim }}>{r.model}</td>
+                <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: DAY.textDim }}>{r.model}</td>
                 <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{formatYen(r.yen)}</td>
               </tr>
             ))}
@@ -158,22 +158,22 @@ export default function TrustPanel() {
         </table>
 
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: INK.text, marginBottom: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: DAY.text, marginBottom: 6 }}>
             削減施策（すべて実測に基づく判断）
           </div>
-          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.9, color: INK.textDim }}>
+          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.9, color: DAY.textDim }}>
             <li>
-              <b style={{ color: INK.text }}>orcarouter/auto（cheapest）を実測で棄却</b> —
+              <b style={{ color: DAY.text }}>orcarouter/auto（cheapest）を実測で棄却</b> —
               最安単価のモデルが推論モデルに解決され、45.96秒・出力2,620トークンを消費。
               「トークン単価最安 ≠ 1リクエストの総コスト最安」。タスク別の明示ルーティングに変更
             </li>
             <li>
-              <b style={{ color: INK.text }}>max_tokens打ち切りの検出</b> —
+              <b style={{ color: DAY.text }}>max_tokens打ち切りの検出</b> —
               推論モデルはthinkingでトークンを使い切り本文0字でHTTP 200を返す。
               finish_reason=length を検出して即エラーにする（orca.ts）。無言の空振り課金を防ぐ
             </li>
             <li>
-              <b style={{ color: INK.text }}>全呼び出しでusageを回収</b> —
+              <b style={{ color: DAY.text }}>全呼び出しでusageを回収</b> —
               画面の各AI応答の脇に「¥」を常時表示。原価が見えない機能は削れない
             </li>
           </ul>
@@ -213,23 +213,23 @@ export default function TrustPanel() {
 
       {/* ── D. なぜOrcaRouterか ─────────────────────── */}
       <Card title="なぜOrcaRouterか" note="ゲートウェイが1枚あることで成立している設計">
-        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.95, color: INK.textDim }}>
+        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.95, color: DAY.textDim }}>
           <li>
-            <b style={{ color: INK.text }}>1キーで3プロバイダを跨ぐ適材適所</b> —
+            <b style={{ color: DAY.text }}>1キーで3プロバイダを跨ぐ適材適所</b> —
             読解=GPT-4.1、起草=Claude、言語化=Gemini。直接統合なら3キー・3SDK・3課金アカウント。
             プロバイダを跨ぐフォールバック（Gemini→GPT→Claude）も1プロトコルで書けている
           </li>
           <li>
-            <b style={{ color: INK.text }}>ゼロマークアップ</b> —
+            <b style={{ color: DAY.text }}>ゼロマークアップ</b> —
             上流の公表単価がそのまま原価になるので、上の原価表に説明不要の前提が1つ増える
           </li>
           <li>
-            <b style={{ color: INK.text }}>ルーティングをブラックボックスにしない</b> —
+            <b style={{ color: DAY.text }}>ルーティングをブラックボックスにしない</b> —
             全応答の X-Orca-* ヘッダとusageを回収し、「どのモデルが・何トークンで・いくらで」を
             その場に表示している
           </li>
           <li>
-            <b style={{ color: INK.text }}>実測で使い方を決めた</b> —
+            <b style={{ color: DAY.text }}>実測で使い方を決めた</b> —
             autoの棄却・フォールバックのアプリ側実装・モデルIDの/v1/models確認。
             機能を鵜呑みにせず、検証できたものだけをデモの経路に置いている
           </li>
@@ -243,7 +243,7 @@ const pStyle: React.CSSProperties = {
   margin: "0 0 12px",
   fontSize: 13,
   lineHeight: 1.85,
-  color: INK.textDim,
+  color: DAY.textDim,
 };
 
 const tableStyle: React.CSSProperties = {
@@ -256,25 +256,25 @@ const thStyle: React.CSSProperties = {
   textAlign: "left",
   padding: "7px 10px",
   fontSize: 13,
-  color: INK.textFaint,
-  borderBottom: `1px solid ${INK.line}`,
+  color: DAY.textFaint,
+  borderBottom: `1px solid ${DAY.line}`,
   fontWeight: 600,
   whiteSpace: "nowrap",
 };
 
 const tdStyle: React.CSSProperties = {
   padding: "8px 10px",
-  borderBottom: `1px solid ${INK.hairline}`,
-  color: INK.text,
+  borderBottom: `1px solid ${DAY.hairline}`,
+  color: DAY.text,
   verticalAlign: "top",
 };
 
 function Card({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
   return (
-    <section style={{ background: INK.surface, border: `1px solid ${INK.line}`, borderRadius: 12, padding: 18 }}>
+    <section style={{ background: DAY.surface, border: `1px solid ${DAY.line}`, borderRadius: 12, padding: 18 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{title}</h2>
-        <span style={{ fontSize: 13, color: INK.textFaint }}>{note}</span>
+        <span style={{ fontSize: 13, color: DAY.textFaint }}>{note}</span>
       </div>
       {children}
     </section>
@@ -283,21 +283,21 @@ function Card({ title, note, children }: { title: string; note: string; children
 
 function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div style={{ background: INK.raised, border: `1px solid ${INK.line}`, borderRadius: 11, padding: "12px 14px" }}>
-      <div style={{ fontSize: 13, color: INK.textFaint }}>{label}</div>
-      <div className="cw-mono" style={{ fontSize: 26, fontWeight: 700, marginTop: 3, color: INK.text }}>
+    <div style={{ background: DAY.raised, border: `1px solid ${DAY.line}`, borderRadius: 11, padding: "12px 14px" }}>
+      <div style={{ fontSize: 13, color: DAY.textFaint }}>{label}</div>
+      <div className="cw-mono" style={{ fontSize: 26, fontWeight: 700, marginTop: 3, color: DAY.text }}>
         {value}
       </div>
-      <div style={{ fontSize: 13, color: INK.textDim, marginTop: 3, lineHeight: 1.6 }}>{sub}</div>
+      <div style={{ fontSize: 13, color: DAY.textDim, marginTop: 3, lineHeight: 1.6 }}>{sub}</div>
     </div>
   );
 }
 
 function SecRow({ title, body }: { title: string; body: string }) {
   return (
-    <div style={{ background: INK.raised, border: `1px solid ${INK.line}`, borderRadius: 11, padding: "12px 14px" }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: INK.text }}>{title}</div>
-      <div style={{ fontSize: 13, color: INK.textDim, marginTop: 5, lineHeight: 1.8 }}>{body}</div>
+    <div style={{ background: DAY.raised, border: `1px solid ${DAY.line}`, borderRadius: 11, padding: "12px 14px" }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: DAY.text }}>{title}</div>
+      <div style={{ fontSize: 13, color: DAY.textDim, marginTop: 5, lineHeight: 1.8 }}>{body}</div>
     </div>
   );
 }

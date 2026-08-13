@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { INK } from "@/lib/forecast/scales";
+import { DAY } from "@/lib/ui/day-theme";
 
 /**
  * 原案（Before）と改善案（After）を行き来するための帯。
@@ -31,13 +31,13 @@ export default function CompareBar() {
         flexWrap: "wrap",
         alignItems: "center",
         padding: "8px 10px",
-        background: INK.surface,
-        border: `1px solid ${INK.line}`,
+        background: DAY.surface,
+        border: `1px solid ${DAY.line}`,
         borderRadius: 11,
         marginBottom: 14,
       }}
     >
-      <span style={{ fontSize: 13, color: INK.textFaint, paddingRight: 4, letterSpacing: 1 }}>版</span>
+      <span style={{ fontSize: 13, color: DAY.textFaint, paddingRight: 4, letterSpacing: 1 }}>版</span>
       {PAGES.map((p) => {
         const current = path === p.href;
         return (
@@ -53,9 +53,9 @@ export default function CompareBar() {
               padding: "6px 12px",
               borderRadius: 8,
               textDecoration: "none",
-              background: current ? INK.text : "transparent",
-              color: current ? INK.page : INK.textDim,
-              border: `1px solid ${current ? INK.text : INK.line}`,
+              background: current ? DAY.text : "transparent",
+              color: current ? DAY.page : DAY.textDim,
+              border: `1px solid ${current ? DAY.text : DAY.line}`,
             }}
           >
             <span style={{ fontSize: 13, opacity: 0.75 }}>{p.tag}</span>

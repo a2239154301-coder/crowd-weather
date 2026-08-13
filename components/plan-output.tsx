@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useScenario } from "@/lib/ui/scenario-context";
 import { dayPlan } from "@/lib/forecast/model";
 import { postsFor, postsToMarks } from "@/lib/ops/staffing";
-import { INK } from "@/lib/forecast/scales";
+import { DAY } from "@/lib/ui/day-theme";
 import SecurityPlan from "./security-plan";
 
 /**
@@ -25,7 +25,7 @@ export default function PlanOutput() {
         style={{
           margin: 0,
           fontSize: 13,
-          color: INK.textDim,
+          color: DAY.textDim,
           lineHeight: 1.8,
           maxWidth: 780,
         }}
