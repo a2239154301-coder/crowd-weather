@@ -20,6 +20,7 @@ import type { Zone } from "@/lib/forecast/types";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
 import { evidenceLabel, evidencePlain } from "@/lib/forecast/evidence";
 import SourceTag from "./source-tag";
+import EntryPeak from "./entry-peak";
 
 /**
  * 当日モード（LIVE）— 1画面・1判断。
@@ -446,6 +447,8 @@ export default function LiveConsole() {
           </p>
         )}
       </section>
+
+      <EntryPeak tickets={scenario.tickets} tone="day" />
     </div>
   );
 }

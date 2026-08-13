@@ -8,6 +8,7 @@ import { fetchLiveWeather, geocode } from "@/lib/weather/open-meteo";
 import HourlyStrip from "./hourly-strip";
 import ZoneTimeline from "./zone-timeline";
 import ArrivalList from "./arrival-list";
+import EntryPeak from "./entry-peak";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
 import { TIME_BANDS, arrivalOrder, venuePeakHour, zoneRisks } from "@/lib/forecast/risk";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
@@ -1078,6 +1079,9 @@ export default function OpsConsole() {
           </div>
         </section>
       </div>
+
+      {/* ── 入場が混む時間帯（ゲート待ち行列予測） ── */}
+      <EntryPeak tickets={scenario.tickets} tone="ink" />
 
       {/* ── ゾーン別 危険度（どこが、いつ、危険になるか） ── */}
       <ZoneTimeline zones={zones} scenario={scenario} hour={hour} onHourChange={setHour} />
