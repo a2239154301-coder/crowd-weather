@@ -419,6 +419,7 @@ button:focus-visible,.switch input:focus-visible+.tr,input:focus-visible{outline
         <div class="ctl"><div class="row"><label><span data-ic="ticket"></span>チケット販売数</label><output id="tktOut"></output></div><input type="range" id="tktRange" min="3000" max="30000" step="500"></div>
         <label class="switch" style="margin:14px 0 4px"><input type="checkbox" id="guideChk" checked><span class="tr"></span><span>容量考慮の日陰誘導（Fruin 2.0人/m²上限）</span></label>
         <div class="note" style="margin-top:12px" id="guideNote"></div>
+        <div class="note" style="margin-top:12px">現在は、予報値から計画書・現場指示・来場者通知をAI生成。今後は許可取得後、過去の人流データや実会場のセンシングデータも取り込み、配置提案や事前シミュレーションまでAI活用を拡張します。</div>
       </div>
     </div>
 
@@ -524,7 +525,7 @@ button:focus-visible,.switch input:focus-visible+.tr,input:focus-visible{outline
         <div class="ptitle">タスク別ルーティングとコスト<small>チケット数スライダーに連動</small></div>
         <div style="overflow-x:auto"><table class="rtable" id="routeTable"></table></div>
         <div class="costbars" id="costBars"></div>
-        <div class="note mono" style="margin-top:12px">統合は base_url の差し替え1行。文書生成の「指示を出力」ボタンが実デモ（API不通時はルールベース生成に自動フォールバック）。</div>
+        <div class="note mono" style="margin-top:12px">統合はサーバー側API経由でOrcaRouterに接続。APIキーはフロントに出さず安全に管理。文書生成の「指示を出力」ボタンが実デモ（API不通時はルールベース生成に自動フォールバック）。</div>
       </div>
       <div class="panel">
         <div class="eyebrow"><span data-ic="database"></span>DATA DESIGN</div>
@@ -544,7 +545,7 @@ button:focus-visible,.switch input:focus-visible+.tr,input:focus-visible{outline
       </div>
       <div class="panel">
         <div class="eyebrow"><span data-ic="trending-up"></span>ROADMAP</div>
-        <div class="ptitle">今後より詰めていきたいところ</div>
+        <div class="ptitle">今後詰めていきたいところ</div>
         <div id="roadmap"></div>
       </div>
     </div>
@@ -565,7 +566,7 @@ button:focus-visible,.switch input:focus-visible+.tr,input:focus-visible{outline
     <footer>
       <button class="mbtn" id="docCopy"><span data-ic="copy"></span>コピー</button>
       <button class="mbtn" id="docRegen"><span data-ic="refresh"></span>再生成</button>
-      <span class="hint">本番構成: OrcaRouter経由（base_url差し替えのみ）</span>
+      <span class="hint">本番構成: OrcaRouter経由でAI生成を最適化</span>
     </footer>
   </div>
 </div>
@@ -573,7 +574,7 @@ button:focus-visible,.switch input:focus-visible+.tr,input:focus-visible{outline
 
 <footer class="site">
   <div class="wrap">
-    <span>CROWD WEATHER v5 ── 都知事杯オープンデータ・ハッカソン2026発 / AIハッカソン応募版</span>
+    <span>CROWD WEATHER v5</span>
     <span class="sp">NOAA SOLAR × SHADOW PROJECTION × WBGT × FRUIN</span>
   </div>
 </footer>
@@ -685,11 +686,11 @@ const ZONES=[
   {id:"prom", n:"中央プロムナード", x:88, y:24, w:30,h:110,roof:0,   base:.09, evening:.08},
 ];
 const BUILDINGS=[
-  {n:"メインステージ構造体", x:150,y:2, w:60,h:16, hgt:16},
-  {n:"サブステージ",         x:28, y:4, w:36,h:12, hgt:10},
-  {n:"展示ホールA",          x:2,  y:58,w:20,h:56, hgt:22},
-  {n:"管理棟",               x:224,y:56,w:14,h:44, hgt:14},
-  {n:"大型ビジョン",         x:104,y:2, w:18,h:8,  hgt:12},
+  {n:"北側施設",           x:150,y:2, w:60,h:16, hgt:16},
+  {n:"北側倉庫",           x:28, y:4, w:36,h:12, hgt:10},
+  {n:"西側仮設棟",         x:2,  y:58,w:20,h:56, hgt:22},
+  {n:"東管理棟",           x:224,y:56,w:14,h:44, hgt:14},
+  {n:"PA卓",               x:104,y:2, w:18,h:8,  hgt:12},
 ];
 ZONES.forEach(z=>{
   z.area=z.w*z.h;
@@ -997,6 +998,14 @@ function drawMap(){
     }
   }
 
+  /* buildings: zones are drawn after this so venue labels stay on top */
+  for(const b of BUILDINGS){
+    ctx.fillStyle="#151F38"; ctx.strokeStyle="#3A4F82";
+    ctx.fillRect(X(b.x),Y(b.y),b.w*sx,b.h*sy); ctx.strokeRect(X(b.x),Y(b.y),b.w*sx,b.h*sy);
+    ctx.fillStyle="#9FB0D8"; ctx.font="8.5px 'IBM Plex Mono',monospace";
+    ctx.fillText(b.n, X(b.x)+3, Y(b.y)+10);
+  }
+
   /* zones */
   for(const z0 of ZONES){
     const z=p.zones.find(q=>q.id===z0.id);
@@ -1011,13 +1020,6 @@ function drawMap(){
     ctx.fillText(z0.n, X(z0.x)+7, Y(z0.y)+15);
     ctx.fillStyle="#A7B6D8"; ctx.font="10px 'IBM Plex Mono',monospace";
     ctx.fillText(f1(z.d)+"人/m²  日陰"+Math.round(z.sf*100)+"%", X(z0.x)+7, Y(z0.y)+28);
-  }
-  /* buildings */
-  for(const b of BUILDINGS){
-    ctx.fillStyle="#151F38"; ctx.strokeStyle="#3A4F82";
-    ctx.fillRect(X(b.x),Y(b.y),b.w*sx,b.h*sy); ctx.strokeRect(X(b.x),Y(b.y),b.w*sx,b.h*sy);
-    ctx.fillStyle="#61719A"; ctx.font="8.5px 'IBM Plex Mono',monospace";
-    ctx.fillText(b.hgt+"m", X(b.x)+3, Y(b.y)+10);
   }
   /* sun compass */
   const cx=cssW-46, cy=44, R=22;
@@ -1346,11 +1348,11 @@ function renderVisitor(){
 "use strict";
 /* ---------- 審査向け ---------- */
 const CRITERIA=[
-  {t:"課題の実在性",ic:"alert-triangle",p:"雑踏事故と熱中症搬送は毎夏の実課題。警備会社・主催者ヒアリングを応募前に実施し、実名コメントを添付予定。"},
+  {t:"課題の実在性",ic:"alert-triangle",p:"雑踏事故と熱中症搬送は毎夏の実課題。現状の取引先であるイベント会社にもヒアリングを実施済。"},
   {t:"ビジネス成立性",ic:"trending-up",p:"主催者向けB2B SaaS（計画+当日運用）＋自治体・鉄道連携。来場者アプリは無料で、利用ログが予報精度を上げる還流構造。"},
   {t:"完成度・デモ説得力",ic:"eye",p:"制作→現場→来場者を同一エンジンで一気通貫。数値はすべて実計算で、スライダー操作に全ビューが即応。"},
-  {t:"AIである必然性",ic:"cpu",p:"「指示を出力」が中核デモ：予報値から計画書・現場指示・アナウンス文を生成。次段は会場図面PDF→初期モデル自動生成。"},
-  {t:"技術的な作り込み",ic:"layers",p:"NOAA太陽位置×影投影×Stull湿球/黒球WBGT×Fruin密度。誘導は容量制約つき再配分問題として実装。"},
+  {t:"AIである必然性",ic:"cpu",p:"「指示を出力」が中核デモ：予報値から計画書・現場指示・アナウンス文を生成。今後は、許可が取れ次第、過去の人流データ・会場図の実データを学習想定。"},
+  {t:"技術的な作り込み",ic:"layers",p:"NOAA太陽位置×影投影×Stull湿球/黒球WBGT×Fruin密度。日陰への人流移動も視野に、各関係者へリアルタイムでデータ反映される見やすいシステムに工夫。"},
   {t:"LLMコスト",ic:"gauge",p:"OrcaRouterで難易度グレーディング→振り分け。コスト主因の来場者チャットを軽量モデルへ逃がし約8割削減（下表・実測予定）。"},
   {t:"セキュリティ",ic:"lock",p:"個人を特定しない統計量のみ扱う設計。APIキーはサーバ側、フロントは予報値のみ。脅威モデル1枚を添付予定。"},
   {t:"次世代性・独創性",ic:"sparkles",p:"機能ではなく時間軸を変えた——「現在の可視化」から「予報」へ。混雑天気記号という新しい共通言語を提案。"}
@@ -1377,11 +1379,17 @@ function renderJudge(){
   $("#costBars").innerHTML=
     '<div class="cb"><div class="cl"><span>全件フロンティア直叩き（1イベント）</span><b>¥'+fmt(frontier)+'</b></div><div class="tr"><i style="width:100%;background:linear-gradient(90deg,#F87171,#FB923C)"></i></div></div>'
     +'<div class="cb"><div class="cl"><span>OrcaRouter ルーティング後</span><b style="color:var(--ok)">¥'+fmt(routed)+'（-'+Math.round((1-routed/frontier)*100)+'%）</b></div><div class="tr"><i style="width:'+w+'%;background:linear-gradient(90deg,#34D399,#38BDF8)"></i></div></div>'
-    +'<div style="font-size:10px;color:var(--t3);font-family:var(--mono)">前提: チャット'+fmt(chatN)+'件・通知'+fmt(notifN)+'件・文書'+planN+'件 ── チケット数に連動する試算値</div>';
+    +'<div style="margin-top:8px;padding:9px 11px;border:1px solid rgba(56,189,248,.38);background:rgba(56,189,248,.08);border-radius:10px;font-size:10.5px;color:var(--sky2);font-family:var(--mono);line-height:1.65">'
+    +'<b style="color:var(--t1)">上の棒グラフの前提</b> ── チケット数から想定した処理量（チャット'+fmt(chatN)+'件・通知'+fmt(notifN)+'件・文書'+planN+'件）で、<b style="color:var(--warn)">全件フロンティア直叩き</b>と<b style="color:var(--ok)">OrcaRouterルーティング後</b>のコストを比較しています。</div>';
 
   const open=[["人流統計","東京データプラットフォーム","混雑"],["道路ネットワーク・幅員","東京都オープンデータ","混雑"],["駅別乗降者数","東京都・各鉄道","混雑"],["3D都市モデル(建物形状)","PLATEAU","暑熱"],["暑さ指数・気象データ","環境省・気象庁","暑熱"],["イベント情報・クールスポット","東京都オープンデータ","両方"]];
   const priv=[["チケット販売数","主催者 ── 来場規模の最重要変数","混雑"],["入退場ゲートログ・場内売上","主催者","混雑"],["Wi-Fi/ビーコン滞留実測","自社センシング","混雑"],["カメラ人流センシング","自社センシング","両方"],["来場者アプリ利用ログ","CROWD WEATHER ── 精度を上げる実測","両方"]];
-  const dc=(d,lock)=>'<div class="dcard"><div class="nm">'+(lock?ic("lock",11)+" ":"")+d[0]+'</div><div class="src">'+d[1]+'</div><span class="badge '+(d[2]==="混雑"?"b-sky":d[2]==="暑熱"?"b-heat":"b-dim")+'">→ '+d[2]+'予測</span></div>';
+  const dc=(d,lock)=>{
+    const liveNote=d[0]==="暑さ指数・気象データ"
+      ?'<div class="src" style="color:var(--ok);font-weight:700">反映済 Open-Meteoを利用</div>'
+      :"";
+    return '<div class="dcard"><div class="nm">'+(lock?ic("lock",11)+" ":"")+d[0]+'</div>'+liveNote+'<div class="src">'+d[1]+'</div><span class="badge '+(d[2]==="混雑"?"b-sky":d[2]==="暑熱"?"b-heat":"b-dim")+'">→ '+d[2]+'予測</span></div>';
+  };
   $("#dataOpen").innerHTML='<div class="eyebrow" style="margin-bottom:6px">'+ic("database",11)+'OPEN ── 誰でも使える土台</div>'+open.map(d=>dc(d,false)).join("");
   $("#dataPriv").innerHTML='<div class="eyebrow" style="margin-bottom:6px">'+ic("lock",11)+'PRIVATE ── 私たちだけの差</div>'+priv.map(d=>dc(d,true)).join("");
 
@@ -1391,9 +1399,10 @@ function renderJudge(){
     ["users","Fruin密度と誘導","密度は人/m²の実単位。日陰誘導は2.0人/m²の容量制約つき再配分——『使うほど危険』を構造的に回避。"]];
   $("#engineSteps").innerHTML=steps.map(s=>'<div class="step"><div class="ic">'+ic(s[0],16)+'</div><div><h5>'+s[1]+' <span class="badge b-ok" style="font-size:9px;padding:1px 7px;vertical-align:1px">実計算</span></h5><p>'+s[2]+'</p></div></div>').join("");
 
-  const road=[["01","会場図面PDF→初期モデル自動生成（会場図面読み込み）","【AIである必然性】を1→5点に動かす一手。デモの中心へ。",true],
+  const road=[["01","会場図面PDF→初期モデル自動生成（会場図面読み込み）","会場写真を取り込み、AIで各エリアを切り分け。3Dモデル化し、混雑・暑熱リスクをヒートマップで可視化する。",true],
     ["02","運用計画書のPDF出力","「手元に残る」まで通す。ビジネス成立性と完成度に同時に効く。",true],
-    ["03","LLMコストの実測表","呼出回数・原価・粗利率の3数字。半日で配点5点ぶん。",true]];
+    ["03","LLMコストの実測表","呼び出し回数や、APIコストの明示化。",true],
+    ["04","運営スタッフの最適配置の提案","混雑ピーク・暑熱リスク・ゲート流量から、時間帯別のゲート／救護／誘導スタッフ配置を提案する。",true]];
   $("#roadmap").innerHTML=road.map(r=>'<div class="step"><div class="ic" style="color:'+(r[3]?"var(--sky)":"var(--t3)")+'"><span style="font-family:var(--mono);font-size:11px;font-weight:600">'+r[0]+'</span></div><div><h5>'+r[1]+'</h5><p>'+r[2]+'</p></div></div>').join("");
 }
 
