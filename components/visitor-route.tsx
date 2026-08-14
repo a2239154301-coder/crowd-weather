@@ -5,6 +5,7 @@ import type { Scenario } from "@/lib/forecast/types";
 import { VENUE, zonesFor } from "@/lib/forecast/venue";
 import { forecastZones, toPath, shadowsAt, sunAt } from "@/lib/forecast/model";
 import { anchorOf, destinationsFor, findRoute, type RoutePreference } from "@/lib/forecast/route";
+import { simulateIngress, type GateId, type IngressGateHour } from "@/lib/forecast/ingress";
 import { INK, densityBand, wbgtBand } from "@/lib/forecast/scales";
 import { evidencePlain } from "@/lib/forecast/evidence";
 import { costYenForMeta, formatYen } from "@/lib/ai/pricing";
@@ -34,6 +35,15 @@ const PREFERENCES: { key: RoutePreference; label: string; hint: string }[] = [
   { key: "cool", label: "日陰を通る", hint: "暑さを避ける" },
   { key: "short", label: "とにかく近い", hint: "最短距離" },
 ];
+
+/**
+ * 入場ゲートの表示順・呼び名。simulateIngress() の GateId（"west"|"east"）に対する
+ * 来場者向けの日本語ラベルはここにしか無いので、ゲートを増やす時はここも直すこと。
+ */
+const GATE_ORDER: GateId[] = ["west", "east"];
+const GATE_LABEL: Record<GateId, string> = { west: "西ゲート", east: "東ゲート" };
+/** これ未満は「もう十分空いている」とみなし、時間帯の提案を無理に作らない（馬場氏フィードバック想定の目安） */
+const OK_WAIT_MIN = 15;
 
 type Snapshot = { scenario: Scenario; hour: number; label: string };
 type RouteQuery = { fromId: string; toId: string; pref: RoutePreference };
@@ -75,6 +85,65 @@ export default function VisitorRoute() {
       .filter((f) => f.density >= 80)
       .sort((a, b) => b.density - a.density);
   }, [snap]);
+
+  /**
+   * 入場の待ち時間（予報の中核＝「いま混んでいる場所」だけでなく「いつ行けば良いか」に答える）。
+   *
+   * simulateIngress()（lib/forecast/ingress.ts・LLM不使用の決定的計算）をそのまま呼ぶだけで、
+   * ここでは待ち時間を計算し直さない。スナップショット方式（このファイル冒頭コメント参照）に
+   * 合わせ、snap.scenario.tickets と snap.hour（＝取り込み時点の時刻）だけを見る。
+   */
+  const ingress = useMemo(
+    () => (snap ? simulateIngress(snap.scenario.tickets) : null),
+    [snap]
+  );
+
+  type GateWaitNow = { gate: GateId; label: string; waitMin: number };
+  const gateWaitNow = useMemo<GateWaitNow[]>(() => {
+    if (!ingress || !snap) return [];
+    return GATE_ORDER.map((gate) => {
+      const row = ingress.byGate[gate].find((r) => r.hour === snap.hour);
+      return { gate, label: GATE_LABEL[gate], waitMin: row?.waitMin ?? 0 };
+    });
+  }, [ingress, snap]);
+
+  type GateSuggestion =
+    | { gate: GateId; label: string; kind: "ok" }
+    | { gate: GateId; label: string; kind: "later"; hour: number; waitMin: number }
+    | { gate: GateId; label: string; kind: "none" };
+  /**
+   * 「待たずに済む時間帯」の提案。現在時刻より後の時間帯だけを走査し、待ち時間が
+   * 最小になる時刻を探す（同値なら早い方）。
+   *
+   * 「今より短くなる」と言えるのは実際に今より待ちが短い場合だけに絞る。改善しない
+   * 時間帯にまで「後の方が楽です」と言うのは、経路案内で混雑指数100の道を
+   * 「比較的空いています」とLLMに書かせてしまった事故と同じ嘘になるため避ける
+   * （このプロジェクトの安全文言の原則。CLAUDE.md参照）。
+   */
+  const gateSuggestions = useMemo<GateSuggestion[]>(() => {
+    if (!ingress || !snap) return [];
+    return gateWaitNow.map(({ gate, label, waitMin: nowWait }) => {
+      if (nowWait < OK_WAIT_MIN) return { gate, label, kind: "ok" as const };
+      let best: IngressGateHour | null = null;
+      for (const row of ingress.byGate[gate]) {
+        if (row.hour <= snap.hour) continue;
+        if (!best || row.waitMin < best.waitMin) best = row;
+      }
+      if (best && best.waitMin < nowWait) {
+        return { gate, label, kind: "later" as const, hour: best.hour, waitMin: best.waitMin };
+      }
+      return { gate, label, kind: "none" as const };
+    });
+  }, [ingress, snap, gateWaitNow]);
+
+  /** 片方が明らかに混んでいれば、空いている方を勧める（両方すいている・差が僅かなら言わない） */
+  const betterGate = useMemo(() => {
+    if (gateWaitNow.length < 2) return null;
+    const [a, b] = gateWaitNow;
+    if (Math.max(a.waitMin, b.waitMin) < OK_WAIT_MIN) return null;
+    if (Math.abs(a.waitMin - b.waitMin) < 5) return null;
+    return a.waitMin < b.waitMin ? a : b;
+  }, [gateWaitNow]);
 
   // ── ④経路探索（既存ロジックを流用） ────────────────────────────
   const [fromId, setFromId] = useState("main");
@@ -239,6 +308,73 @@ export default function VisitorRoute() {
             情報を取り込む
           </button>
         </div>
+      </div>
+
+      {/* 入場の待ち時間 */}
+      <div
+        style={{
+          background: DAY.surface,
+          border: `1px solid ${DAY.line}`,
+          borderRadius: 14,
+          padding: 16,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: DAY.text }}>入場の待ち時間</div>
+          <SourceTag kind="calc" tone="day" />
+        </div>
+        <p style={{ margin: "6px 0 0", fontSize: 13, color: DAY.textDim, lineHeight: 1.7 }}>
+          いま入場した場合の見込みです。実際の列の伸び方によって前後します。
+        </p>
+
+        {!snap || !ingress ? (
+          <div style={{ marginTop: 12, fontSize: 13, color: DAY.textFaint }}>情報を取得中…</div>
+        ) : (
+          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+            {betterGate && (
+              <div
+                style={{
+                  padding: "9px 11px",
+                  borderRadius: 10,
+                  background: DAY.accentSoft,
+                  color: DAY.text,
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                いま向かうなら、{betterGate.label}のほうが空いています。
+              </div>
+            )}
+            {gateWaitNow.map((g) => {
+              const s = gateSuggestions.find((x) => x.gate === g.gate);
+              return (
+                <div
+                  key={g.gate}
+                  style={{
+                    padding: "10px 12px",
+                    background: DAY.page,
+                    borderRadius: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: DAY.text }}>{g.label}</span>
+                    <span className="cw-mono" style={{ fontSize: 19, fontWeight: 700, color: DAY.text }}>
+                      {waitPhrase(g.waitMin)}
+                    </span>
+                  </div>
+                  {s && (
+                    <div style={{ marginTop: 4, fontSize: 13, color: DAY.textDim }}>
+                      {s.kind === "later" &&
+                        `${s.hour}時なら${Math.floor(s.waitMin) <= 0 ? "ほとんど待ちません" : `約${Math.floor(s.waitMin)}分です`}。`}
+                      {s.kind === "ok" && "いま向かって大丈夫です。"}
+                      {s.kind === "none" && "空いてくる時間帯は見当たりません。"}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 混雑エリア一覧 */}
@@ -702,6 +838,12 @@ export default function VisitorRoute() {
       </div>
     </section>
   );
+}
+
+/** 「約◯分待ち」の文言化。1分未満は数字を出さず、ゼロを大きく見せない（entry-peak.tsx と同じ0捨て丸め） */
+function waitPhrase(waitMin: number): string {
+  const m = Math.floor(waitMin);
+  return m <= 0 ? "ほとんど待ちません" : `約${m}分待ち`;
 }
 
 function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
