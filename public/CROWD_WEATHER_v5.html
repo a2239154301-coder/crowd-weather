@@ -1603,6 +1603,14 @@ function ruleDoc(kind,c){
   return L.join("\n");
 }
 let lastDocKind="plan";
+/* kind→APIの対応。judgeは製品説明の定型文なので予報エンジンを呼ばずルールベースのまま
+   （実データに基づかない内容をAI生成に見せない＝正直なラベリング）。 */
+function docApiRequest(kind,c){
+  if(kind==="plan") return {url:"/api/plan", body:c};
+  if(kind==="live") return {url:"/api/advice", body:{mode:"directive", forecast:c}};
+  if(kind==="visitor") return {url:"/api/advice", body:{audience:"visitor", forecast:c}};
+  return null;
+}
 async function generateDoc(kind){
   lastDocKind=kind;
   const def=DOCDEF[kind], c=docContext();
@@ -1612,28 +1620,28 @@ async function generateDoc(kind){
   const body=$("#docbody");
   body.classList.add("busy");
   body.innerHTML='<div><div class="spin"></div>予報値から生成しています…</div>';
-  let text=null, viaAI=false;
-  try{
-    const r=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST", headers:{"Content-Type":"application/json"},
-      signal:AbortSignal.timeout(20000),
-      body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,
-        messages:[{role:"user",content:
-          "あなたはイベント安全管理の専門家。以下のJSON（混雑・暑熱予報の実計算値）だけを根拠に、日本語で「"+def.ask+"」を作成。"
-          +"数値はJSONにあるものだけを使い、創作しない。見出し＋短文で、プレーンテキストのみ（Markdown記号なし）。500字程度。\n\n"
-          +JSON.stringify(c)}]})
-    });
-    if(r.ok){
-      const j=await r.json();
-      text=(j.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").trim();
-      viaAI=!!text;
-    }
-  }catch(e){ /* fall through */ }
+  let text=null, viaAI=false, servedModel=null;
+  const req=docApiRequest(kind,c);
+  if(req){
+    try{
+      const r=await fetch(req.url,{
+        method:"POST", headers:{"Content-Type":"application/json"},
+        signal:AbortSignal.timeout(35000), // planタスクは実測18.7秒・フォールバック段も見込んで余裕を持たせる
+        body:JSON.stringify(req.body)
+      });
+      if(r.ok){
+        const j=await r.json();
+        text=(j.text||"").trim();
+        servedModel=j.meta&&j.meta.servedModel;
+        viaAI=!!text;
+      }
+    }catch(e){ /* fall through */ }
+  }
   if(!text) text=ruleDoc(kind,c);
   body.classList.remove("busy");
   body.textContent=text;
   $("#docSrc").innerHTML=viaAI
-    ?'<span class="badge b-sky">'+ic("cpu",10)+'AI生成 ── router→frontier</span>'
+    ?'<span class="badge b-sky">'+ic("cpu",10)+'AI生成 ── '+(servedModel||"OrcaRouter")+'</span>'
     :'<span class="badge b-ok">'+ic("check",10)+'ルールベース生成（オフライン動作）</span>';
 }
 
