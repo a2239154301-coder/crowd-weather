@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Scenario, Weather } from "@/lib/forecast/types";
+import type { EventDate, Scenario, Weather } from "@/lib/forecast/types";
 import { VENUE, DEFAULT_SCENARIO, HOURS, zonesFor } from "@/lib/forecast/venue";
-import { centroid, dayPlan, hourPeak } from "@/lib/forecast/model";
+import { centroid, dayPlan, hourPeak, sunAt } from "@/lib/forecast/model";
 import { fetchLiveWeather, geocode } from "@/lib/weather/open-meteo";
 import HourlyStrip from "./hourly-strip";
 import ZoneTimeline from "./zone-timeline";
@@ -23,6 +23,37 @@ type Scope = "in" | "out";
 
 const WEATHER_LABEL: Record<Weather, string> = { sunny: "晴", cloudy: "曇", rainy: "雨" };
 const WEATHER_GLYPH: Record<Weather, string> = { sunny: "☀", cloudy: "☁", rainy: "☂" };
+
+/**
+ * 開催日プリセット（v4 `mock.jsx:1033-1038` から同じ日付・同じラベルを移植）。
+ * 太陽赤緯が変わる＝同じ時刻でも高度と影の長さが変わることを実演するための4点
+ * （夏至＝影が最短／秋分＝春秋の基準／GW＝閑散期比較）。年は2026固定（v4のまま）。
+ */
+const DATE_PRESETS: EventDate[] = [
+  { y: 2026, mo: 6, d: 21, label: "6/21 夏至" },
+  { y: 2026, mo: 8, d: 8, label: "8/8 真夏" },
+  { y: 2026, mo: 9, d: 23, label: "9/23 秋分" },
+  { y: 2026, mo: 5, d: 5, label: "5/5 GW" },
+];
+
+/**
+ * 太陽方位を8方位の日本語ラベルへ（v4は数値のみだったが、コンパス表示 SunCompass と
+ * 対応づけやすいよう追加）。0°=北、90°=東、180°=南、270°=西。
+ */
+function compassLabel(azimuthDeg: number): string {
+  const dirs = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"];
+  const idx = Math.round((((azimuthDeg % 360) + 360) % 360) / 45) % 8;
+  return dirs[idx];
+}
+
+/**
+ * 影長readoutの代表建物（v4 `mock.jsx:1015` は「40m建物」という固定値の演出だったが、
+ * VENUE.buildings は実高さを持つため実データに置き換える。最高層＝駅ビル(46m)を採用
+ * （来場者の目に触れる代表的な建造物で、影の伸びが最も分かりやすいため）。
+ */
+const REPRESENTATIVE_BUILDING = VENUE.buildings.reduce((tallest, b) =>
+  b.height > tallest.height ? b : tallest
+);
 
 type AiMeta = {
   servedModel: string;
@@ -132,6 +163,20 @@ export default function OpsConsole() {
 
   const plan = useMemo(() => dayPlan(scenario), [scenario]);
   const now = useMemo(() => hourPeak(zones, hour, scenario), [zones, hour, scenario]);
+
+  /**
+   * 太陽位置readout（2026-08-14 復帰・v4 `mock.jsx:1011-1023` 相当）。
+   * `sunAt()` は決定的計算（`venue-map.tsx` の SunCompass と同じ関数・同じ引数）なので、
+   * 地図に描かれる影の向きと数値が必ず一致する。night判定のしきい値3°は
+   * `lib/forecast/model.ts` の `shadowOf`/`shadeFraction` と同じ値に揃える
+   * （v4は0.5°だったが、それだと「影は描かれないのに数値だけ出る」帯ができるため）。
+   */
+  const sun = useMemo(() => sunAt(hour, scenario.date, scenario.geo), [hour, scenario.date, scenario.geo]);
+  const sunNight = sun.altitudeDeg <= 3;
+  // 影長 = 代表建物の高さ ÷ tan(太陽高度)。999mで頭打ち（v4踏襲・境界付近のtan→0発散を止める）
+  const shadowLenM = sunNight
+    ? null
+    : Math.min(999, Math.round(REPRESENTATIVE_BUILDING.height / Math.tan((sun.altitudeDeg * Math.PI) / 180)));
 
   // 到来順は常設表示（ZoneTimeline直下）になったのでレイヤーに関係なく計算する。
   // 対象は常に会場内＋会場外の全ゾーン（scope切替の影響を受けない）
@@ -462,6 +507,40 @@ export default function OpsConsole() {
                 実況を取得できませんでした（手入力の値のまま）
               </div>
             )}
+            {/*
+              開催日プリセット（2026-08-14 復帰）。v4 `mock.jsx:1031-1045` にあったが、
+              現行UIには set("date", …) という更新口だけがあってボタンが無く、開催日を
+              変える手段が画面のどこにも無かった（LIVE取得で今日の日付に上書きされる時しか動かない）。
+              太陽位置→影→WBGTの実計算が核なので、日付を変えて影の長さが動く様子を
+              見せられないのは本製品の見どころを隠していたのと同じ。
+            */}
+            <Field label="開催日" value={scenario.date.label}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                {DATE_PRESETS.map((dd) => {
+                  const active = scenario.date.mo === dd.mo && scenario.date.d === dd.d;
+                  return (
+                    <button
+                      key={dd.label}
+                      onClick={() => set("date", dd)}
+                      aria-pressed={active}
+                      style={{
+                        minHeight: 44,
+                        padding: "8px 0",
+                        borderRadius: 9,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        border: `1px solid ${active ? T.accent : T.line}`,
+                        background: active ? T.accent : "transparent",
+                        color: active ? T.page : T.textDim,
+                      }}
+                    >
+                      {dd.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
             <Field label="天候">
               <div style={{ display: "flex", gap: 6 }}>
                 {(["sunny", "cloudy", "rainy"] as Weather[]).map((w) => (
@@ -682,6 +761,64 @@ export default function OpsConsole() {
               color="#7DD3FC"
             />
           </div>
+
+          {/*
+            太陽位置readout（2026-08-14 復帰・v4 `mock.jsx:1011-1023` 相当）。
+            会場図の SunCompass は方位を図でしか示さないため、「なぜいまここが日陰か」を
+            数値で裏付ける役目をこの4項目が持つ。日没後（高度3°以下）は影長を∞やNaNにせず「—」にする。
+          */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+            <Stat
+              label="太陽高度"
+              value={sunNight ? "日没後" : `${sun.altitudeDeg.toFixed(1)}°`}
+              sub={`${hour}:00時点`}
+              color="#FDE047"
+            />
+            <Stat
+              label="太陽方位"
+              value={sunNight ? "—" : `${sun.azimuthDeg.toFixed(0)}°`}
+              sub={sunNight ? "日没後" : compassLabel(sun.azimuthDeg)}
+              color="#93A3C0"
+            />
+            <Stat
+              label="影長"
+              value={sunNight ? "—" : `${shadowLenM}m`}
+              sub={`${REPRESENTATIVE_BUILDING.name}(${REPRESENTATIVE_BUILDING.height}m)換算`}
+              color="#38BDF8"
+            />
+            <Stat
+              label="敷地日陰率"
+              value={`${now.shadeRate}%`}
+              sub={`${scopeLabel}ゾーン`}
+              color="#C4B5FD"
+            />
+          </div>
+
+          {/*
+            会場外の解説（2026-08-14 復帰・一貫性の是正）。b166d24で会場内／会場外トグルを
+            戻した理由（場内と場外は見るべき論点が違う）そのものを説明する段落だけ戻し忘れていた。
+            08-14の「説明文の削減」方針（馬場氏レビュー項目7）に合わせ、元の2文構成から
+            核（終演後は退場動線→駅前広場→改札→ホームへ波及する）だけを残して1〜2行に圧縮する。
+          */}
+          {scope === "out" && (
+            <p
+              style={{
+                margin: 0,
+                fontSize: 13,
+                lineHeight: 1.8,
+                color: T.textDim,
+                background: T.raised,
+                border: `1px dashed ${T.line}`,
+                borderRadius: 10,
+                padding: "11px 13px",
+              }}
+            >
+              危険は会場の外へ波及する — 終演後は<b style={{ color: T.text }}>退場動線→駅前広場→改札→ホーム</b>の順に詰まる。
+              {plan.outsideDanger
+                ? "本シナリオでは商店街の路地が危険密度に達するため、鉄道・警察との退場連携を推奨。"
+                : "本シナリオでは通常巡回でよい。"}
+            </p>
+          )}
 
           {/* ── AIアドバイザー ─────────────────────── */}
           <div
