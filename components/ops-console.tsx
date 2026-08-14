@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Scenario, Weather } from "@/lib/forecast/types";
-import { VENUE, DEFAULT_SCENARIO, HOURS } from "@/lib/forecast/venue";
+import { VENUE, DEFAULT_SCENARIO, HOURS, zonesFor } from "@/lib/forecast/venue";
 import { centroid, dayPlan, hourPeak } from "@/lib/forecast/model";
 import { fetchLiveWeather, geocode } from "@/lib/weather/open-meteo";
 import HourlyStrip from "./hourly-strip";
@@ -17,6 +17,9 @@ import VenueMap, { type MapLayer, type StaffMark } from "./venue-map";
 import SourceTag from "./source-tag";
 import { useScenario } from "@/lib/ui/scenario-context";
 import { postsFor, postsToMarks } from "@/lib/ops/staffing";
+
+/** 会場内／会場外。`zonesFor()` の引数と同じ語彙（二重管理にしない） */
+type Scope = "in" | "out";
 
 const WEATHER_LABEL: Record<Weather, string> = { sunny: "晴", cloudy: "曇", rainy: "雨" };
 const WEATHER_GLYPH: Record<Weather, string> = { sunny: "☀", cloudy: "☁", rainy: "☂" };
@@ -110,11 +113,22 @@ export default function OpsConsole() {
   const [aiBusy, setAiBusy] = useState(false);
   const [easyStyle, setEasyStyle] = useState(false);
 
-  // リスク予報レイヤーが「会場内＋会場外」合算だった前提を、2026-08-14に全画面へ統一した
-  // （再設計 §2-2）。危険は終演時に退場動線 → 駅前広場 → 改札 → ホーム と境界をまたいで
-  // 移るので、分けると話が切れる。画面・統計・AIへ渡す予報は、すべてこの zones に揃える
-  const zones = VENUE.zones;
-  const scopeLabel = "会場内＋会場外";
+  /**
+   * 会場内／会場外の切替（2026-08-14 復帰）。
+   *
+   * 一度は再設計 §2-2 で外し「全画面18ゾーン合算」に統一したが、**原案v4がこの切替を
+   * 持っていた**ため戻した（`components/original-v4/mock.jsx` の scope トグル）。
+   * 場内と場外は見るべき論点が違う: 場内=滞留と暑熱、場外=終演後の駅・路地への退場波及。
+   * 合算だけにすると「どちらが効いているか」が読めなくなる。
+   *
+   * この scope は時間帯別ストリップ・3カラムスタット・ZONE TIMELINE・AIへ渡す予報の
+   * すべてに波及する（`zones` が唯一の供給元）。
+   * 一方「危険の到来順」だけは常に全ゾーン（`VENUE.zones`）で計算する — 危険は境界をまたいで
+   * 移動する（退場動線 → 駅前広場 → 改札 → ホーム）ので、そこを切ると話が途切れるため。
+   */
+  const [scope, setScope] = useState<Scope>("in");
+  const zones = useMemo(() => zonesFor(scope), [scope]);
+  const scopeLabel = scope === "in" ? "会場内" : "会場外";
 
   const plan = useMemo(() => dayPlan(scenario), [scenario]);
   const now = useMemo(() => hourPeak(zones, hour, scenario), [zones, hour, scenario]);
@@ -591,18 +605,20 @@ export default function OpsConsole() {
         {/* ── 会場図 ──────────────────────────────── */}
         <section style={{ display: "grid", gap: 12, alignContent: "start" }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: T.textDim,
-                border: `1px solid ${T.line}`,
-                borderRadius: 9,
-                padding: "9px 13px",
-              }}
-            >
-              会場内＋会場外
-            </span>
+            {/*
+              会場内／会場外の切替（2026-08-14 復帰）。
+              一度は「機能の混在」への対応として外し全画面18ゾーン合算に統一したが、
+              原案v4がこの切替を持っており（components/original-v4/mock.jsx の scope トグル）、
+              会場内と会場外は見るべき論点が違う（場内=滞留と暑熱／場外=駅と路地の退場波及）ため戻した。
+            */}
+            <Toggle
+              options={[
+                ["in", "会場内"],
+                ["out", "会場外"],
+              ]}
+              value={scope}
+              onChange={(v) => setScope(v as Scope)}
+            />
             <Toggle
               options={[
                 ["crowd", "混雑"],
