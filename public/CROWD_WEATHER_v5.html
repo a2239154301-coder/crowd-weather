@@ -1357,30 +1357,51 @@ const CRITERIA=[
   {t:"セキュリティ",ic:"lock",p:"APIキーはサーバー側に隔離し、AI呼び出しはOrcaRouter経由に集約（ブラウザから直接AIを叩ける経路は作らない）。その上でAIに実行させない設計 ── 配信は人間の明示操作だけ、配置ポストの採番もAIにはさせない。AIの出力はサーバー側で実在検証し、配置案19件中2件を棄却した（実測）。個人情報はAIに届く前にマスク。"},
   {t:"次世代性・独創性",ic:"sparkles",p:"機能ではなく時間軸を変えた——「現在の可視化」から「予報」へ。混雑天気記号という新しい共通言語を提案。"}
 ];
+/* 単価はすべて実測値（トークン数=実測／単価=各社の公表値・1ドル150円換算）。
+   1イベント39回の実測内訳を、1件あたりに割り戻したもの。 */
 const ROUTES=[
-  {task:"計画書・現場指示の文章化",d:0.86,model:"frontier",price:9},
-  {task:"来場者こまりごとチャット",d:0.45,model:"mid",price:1.8},
-  {task:"多言語アナウンス変換",d:0.18,model:"軽量OSS",price:0.12}
+  {task:"会場資料の読解（画像→ゾーン）",d:0.90,model:"gpt-4.1",             tier:"frontier",price:5.5,  n:1, note:"イベントごと1回"},
+  {task:"計画書・総括の起草",          d:0.86,model:"claude-sonnet-4.6",   tier:"frontier",price:2.03, n:3, note:""},
+  {task:"自由文の解釈（What-if）",      d:0.45,model:"gpt-4.1",             tier:"mid",     price:0.46, n:5, note:""},
+  {task:"現場指示・運営判断",           d:0.30,model:"gemini-2.5-flash-lite",tier:"light",  price:0.033,n:10,note:""},
+  {task:"来場者への経路説明",           d:0.18,model:"gemini-2.5-flash-lite",tier:"light",  price:0.018,n:20,note:""}
 ];
+/* 実測の基礎: いまの実装で1イベントを丸ごと運用したときの合計（39回） */
+const MEASURED_CALLS=39, MEASURED_YEN=14.6;
 function renderJudge(){
   $("#judgeGrid").innerHTML=CRITERIA.map((c,i)=>
     '<div class="jcard"><div class="no">CRITERIA '+String(i+1).padStart(2,"0")+'</div>'
     +'<h4 style="display:flex;align-items:center;gap:7px"><span style="color:var(--sky)">'+ic(c.ic,14)+'</span>'+c.t+'</h4>'
     +'<p>'+c.p+'</p></div>').join("");
 
+  /* 単価は上のROUTES（実測値）をそのまま使う。件数だけがチケット数からの想定。 */
+  const P_DOC=ROUTES[1].price, P_CHAT=ROUTES[2].price, P_NOTIF=ROUTES[4].price;
   const chatN=Math.round(S.tickets*0.8), notifN=Math.round(S.tickets*2.4), planN=6;
-  const frontier=(chatN+notifN+planN)*9;
-  const routed=planN*9+chatN*1.8+notifN*0.12;
-  $("#routeTable").innerHTML='<thead><tr><th>タスク</th><th>難易度</th><th>ルート先</th><th>単価</th></tr></thead><tbody>'
-    +ROUTES.map(r=>'<tr><td>'+r.task+'</td><td style="font-family:var(--mono);color:var(--sky2)">'+r.d.toFixed(2)+'</td>'
-      +'<td><span class="badge '+(r.model==="frontier"?"b-sky":r.model==="mid"?"b-warn":"b-ok")+'">'+r.model+'</span></td>'
+  const frontier=(chatN+notifN+planN)*P_DOC;   // 全件を最上位モデル（計画書と同じ）で処理した場合
+  const routed=planN*P_DOC+chatN*P_CHAT+notifN*P_NOTIF;
+  $("#routeTable").innerHTML='<thead><tr><th>タスク</th><th>難易度</th><th>ルート先</th><th>実測単価</th></tr></thead><tbody>'
+    +ROUTES.map(r=>'<tr><td>'+r.task+(r.note?' <span style="color:var(--t3);font-size:9px">'+r.note+'</span>':'')+'</td>'
+      +'<td style="font-family:var(--mono);color:var(--sky2)">'+r.d.toFixed(2)+'</td>'
+      +'<td><span class="badge '+(r.tier==="frontier"?"b-sky":r.tier==="mid"?"b-warn":"b-ok")+'">'+r.model+'</span></td>'
       +'<td style="font-family:var(--mono);color:var(--t3)">¥'+r.price+'/件</td></tr>').join("")+'</tbody>';
   const w=Math.max(4,routed/frontier*100);
   $("#costBars").innerHTML=
-    '<div class="cb"><div class="cl"><span>全件フロンティア直叩き（1イベント）</span><b>¥'+fmt(frontier)+'</b></div><div class="tr"><i style="width:100%;background:linear-gradient(90deg,#F87171,#FB923C)"></i></div></div>'
-    +'<div class="cb"><div class="cl"><span>OrcaRouter ルーティング後</span><b style="color:var(--ok)">¥'+fmt(routed)+'（-'+Math.round((1-routed/frontier)*100)+'%）</b></div><div class="tr"><i style="width:'+w+'%;background:linear-gradient(90deg,#34D399,#38BDF8)"></i></div></div>'
+    /* ① 実測 ── すべての土台。ここだけが「測った数字」 */
+    '<div style="margin:2px 0 12px;padding:11px 13px;border:1px solid rgba(74,222,128,.45);background:rgba(74,222,128,.07);border-radius:10px">'
+    +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">'
+    +'<span style="font-size:11px;color:var(--ok);font-weight:700">実測 ── いまの実装で1イベントを丸ごと運用</span>'
+    +'<b style="font-family:var(--mono);font-size:17px;color:var(--ok)">¥'+MEASURED_YEN+'</b></div>'
+    +'<div style="font-size:10px;color:var(--t2);font-family:var(--mono);margin-top:5px;line-height:1.6">'
+    +'AI呼び出し'+MEASURED_CALLS+'回の合計（上表の単価×回数）。混雑・暑熱・日陰・経路探索は決定的計算でLLM原価0円のため、'
+    +'<b style="color:var(--t1)">来場者が何万人に増えてもこの額は増えません</b>。</div></div>'
+    /* ② 試算 ── ①の実測単価を、来場者アプリを本格運用した規模へ当てはめたもの */
+    +'<div style="font-size:11px;color:var(--warn);font-weight:700;margin-bottom:7px">試算 ── 来場者アプリを全来場者に開いた場合（チケット'+fmt(S.tickets)+'枚）</div>'
+    +'<div class="cb"><div class="cl"><span>全件を最上位モデルで処理した場合</span><b>¥'+fmt(Math.round(frontier))+'</b></div><div class="tr"><i style="width:100%;background:linear-gradient(90deg,#F87171,#FB923C)"></i></div></div>'
+    +'<div class="cb"><div class="cl"><span>用途別に振り分けた場合（OrcaRouter）</span><b style="color:var(--ok)">¥'+fmt(Math.round(routed))+'（-'+Math.round((1-routed/frontier)*100)+'%）</b></div><div class="tr"><i style="width:'+w+'%;background:linear-gradient(90deg,#34D399,#38BDF8)"></i></div></div>'
     +'<div style="margin-top:8px;padding:9px 11px;border:1px solid rgba(56,189,248,.38);background:rgba(56,189,248,.08);border-radius:10px;font-size:10.5px;color:var(--sky2);font-family:var(--mono);line-height:1.65">'
-    +'<b style="color:var(--t1)">上の棒グラフの前提</b> ── チケット数から想定した処理量（チャット'+fmt(chatN)+'件・通知'+fmt(notifN)+'件・文書'+planN+'件）で、<b style="color:var(--warn)">全件フロンティア直叩き</b>と<b style="color:var(--ok)">OrcaRouterルーティング後</b>のコストを比較しています。</div>';
+    +'<b style="color:var(--t1)">単価は実測値・件数だけが想定</b> ── 上表の実測単価はそのまま使い、処理量だけをチケット数から見積もっています'
+    +'（来場者案内'+fmt(chatN)+'件＝チケット×0.8／アナウンス'+fmt(notifN)+'件＝チケット×2.4／文書'+planN+'件）。'
+    +'左の赤は、この全件を計画書と同じ最上位モデル（¥'+P_DOC+'/件）で処理した場合です。</div>';
 
   const open=[["人流統計","東京データプラットフォーム","混雑"],["道路ネットワーク・幅員","東京都オープンデータ","混雑"],["駅別乗降者数","東京都・各鉄道","混雑"],["3D都市モデル(建物形状)","PLATEAU","暑熱"],["暑さ指数・気象データ","環境省・気象庁","暑熱"],["イベント情報・クールスポット","東京都オープンデータ","両方"]];
   const priv=[["チケット販売数","主催者 ── 来場規模の最重要変数","混雑"],["入退場ゲートログ・場内売上","主催者","混雑"],["Wi-Fi/ビーコン滞留実測","自社センシング","混雑"],["カメラ人流センシング","自社センシング","両方"],["来場者アプリ利用ログ","CROWD WEATHER ── 精度を上げる実測","両方"]];
