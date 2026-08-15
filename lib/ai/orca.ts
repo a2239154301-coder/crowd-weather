@@ -63,7 +63,7 @@ export const ROUTING: Record<OrcaTask, RoutingPolicy> = {
   },
   // 自然言語→シナリオ差分の翻訳。flash-lite では解釈を取りこぼす
   // （実測2026-08-11: 「無風」のwindMs変換漏れ・「半分」の乗算不能が3問中2問）。
-  // gpt-4o-mini は速度同等で指示追従が安定。
+  // gpt-4.1 は指示追従が安定（当初候補の gpt-4o-mini から差し替え済み）。
   whatif: {
     model: "openai/gpt-4.1",
     fallbacks: ["anthropic/claude-haiku-4.5", "google/gemini-2.5-flash-lite"],

@@ -18,10 +18,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
 
-  const prompt = body?.prompt;
-  if (!prompt || typeof prompt !== "string") {
+  const rawPrompt = body?.prompt;
+  if (!rawPrompt || typeof rawPrompt !== "string") {
     return NextResponse.json({ error: "prompt is required" }, { status: 400 });
   }
+  // 入口で長さを切る。デモ用の合言葉はREADMEに公開しているため、
+  // ゲートを通れる相手が任意長のプロンプトを流し込める状態にはしない
+  // （正規の呼び出し元 /original-v4 は約700字なので実害なし）。
+  const prompt = rawPrompt.slice(0, 4000);
 
   try {
     const { text, meta } = await callOrca({

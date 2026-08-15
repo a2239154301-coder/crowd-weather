@@ -17,7 +17,7 @@ import { useTheme } from "@/lib/ui/theme";
 const PAGES: { href: string; tag: string; label: string; note: string }[] = [
   { href: "/original", tag: "原案", label: "馬場案 v1", note: "受領時のまま" },
   { href: "/original-v4", tag: "原案", label: "馬場案 v4", note: "暑熱エンジン・08-10" },
-  { href: "/", tag: "改善案", label: "予報コンソール", note: "準備／当日／来場者" },
+  { href: "/internal", tag: "改善案", label: "予報コンソール", note: "準備／当日／来場者" },
 ];
 
 export default function CompareBar() {

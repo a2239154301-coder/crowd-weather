@@ -9,6 +9,11 @@ import { PLAN_SYSTEM, adviceUserPrompt } from "@/lib/ai/prompts";
  * 速度より文章品質を優先して plan タスク（上位モデル）に載せる。
  * 数値・配置は全てクライアント側の計算エンジンが出したものを渡す。
  */
+
+// 本番実測で29.3秒（claude-sonnet-4.6・2026-08-15計測）。既定の実行上限に頼ると
+// 将来的に切られうるので、ingest と同じく明示的に60秒へ引き上げておく。
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   let forecast: unknown;
   try {

@@ -141,4 +141,4 @@ node scripts/firewall-check.mjs    # Firewallの疎通（--expect-deny で遮断
 | フォールバックの実装 | `lib/ai/orca.ts` の `callOrca()`。**OrcaRouterの `models`+`route:"fallback"` は効いている証拠が取れなかったため自前実装**（2026-08-09の判断） |
 | 打ち切り検出 | `finish_reason === "length"` を明示的にエラー化。本文0字のまま200で返る事故を防ぐ |
 | APIキーの隔離 | `lib/ai/orca.ts` の1ファイルに集約。`.env*` は `.gitignore` 済み |
-| デモ用アクセス制御 | `middleware.ts`（合言葉ゲート・HttpOnly Cookie・定数時間比較） |
+| デモ用アクセス制御 | 合言葉ゲート。`middleware.ts` がCookieを検証し、`app/api/gate/route.ts` が定数時間比較で照合してHttpOnly Cookieを発行する |

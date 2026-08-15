@@ -1216,7 +1216,7 @@ function renderPlan(){
   const cut=Math.round((1-SERIES.expNow/Math.max(SERIES.expNone,0.001))*100);
   $("#guideNote").innerHTML=S.guide
     ? "誘導ON：暑熱曝露を<b style='color:var(--ok)'>−"+cut+"%</b>（誘導なし比）に低減。日陰への再配分はFruin <b>2.0人/m²上限</b>の容量制約つき——<b>使われるほど日陰が過密になるアプリ</b>を、この上限が構造的に防いでいる。"
-    : "誘導OFF：自然分布のまま。日なたの滞留がそのまま残り、暑熱曝露は誘導ONより約<b style='color:var(--heat)'>"+Math.max(0,-Math.round((1-SERIES.expNone/Math.max(SERIES.expNow,0.001))*100))+"%高い</b>。ONに戻すと容量考慮つきで日陰へ再配分します。";
+    : "誘導OFF：自然分布のまま。<b style='color:var(--heat)'>日なたの滞留がそのまま残ります</b>。ONに戻すと、Fruin 2.0人/m²の容量制約つきで日陰へ再配分します。";
 
   const tl=$("#tarpList");
   tl.innerHTML=PROPOSALS.length?PROPOSALS.map(pr=>{
@@ -1379,17 +1379,21 @@ function renderJudge(){
   const chatN=Math.round(S.tickets*0.8), notifN=Math.round(S.tickets*2.4), planN=6;
   const frontier=(chatN+notifN+planN)*P_DOC;   // 全件を最上位モデル（計画書と同じ）で処理した場合
   const routed=planN*P_DOC+chatN*P_CHAT+notifN*P_NOTIF;
-  $("#routeTable").innerHTML='<thead><tr><th>タスク</th><th>難易度</th><th>ルート先</th><th>実測単価</th></tr></thead><tbody>'
+  $("#routeTable").innerHTML='<thead><tr><th>タスク</th><th>想定負荷<small>設計値</small></th><th>ルート先</th><th>実測単価</th><th>回数</th></tr></thead><tbody>'
     +ROUTES.map(r=>'<tr><td>'+r.task+(r.note?' <span style="color:var(--t3);font-size:9px">'+r.note+'</span>':'')+'</td>'
       +'<td style="font-family:var(--mono);color:var(--sky2)">'+r.d.toFixed(2)+'</td>'
       +'<td><span class="badge '+(r.tier==="frontier"?"b-sky":r.tier==="mid"?"b-warn":"b-ok")+'">'+r.model+'</span></td>'
-      +'<td style="font-family:var(--mono);color:var(--t3)">¥'+r.price+'/件</td></tr>').join("")+'</tbody>';
+      +'<td style="font-family:var(--mono);color:var(--t3)">¥'+r.price+'/件</td>'
+      +'<td style="font-family:var(--mono);color:var(--t2)">×'+r.n+'</td></tr>').join("")
+    +'<tr><td colspan="3" style="text-align:right;color:var(--t2)">合計（単価×回数）</td>'
+    +'<td style="font-family:var(--mono);color:var(--ok);font-weight:700">¥'+ROUTES.reduce((a,r)=>a+r.price*r.n,0).toFixed(2)+'</td>'
+    +'<td style="font-family:var(--mono);color:var(--ok);font-weight:700">×'+ROUTES.reduce((a,r)=>a+r.n,0)+'</td></tr></tbody>';
   const w=Math.max(4,routed/frontier*100);
   $("#costBars").innerHTML=
     /* ① 実測 ── すべての土台。ここだけが「測った数字」 */
     '<div style="margin:2px 0 12px;padding:11px 13px;border:1px solid rgba(74,222,128,.45);background:rgba(74,222,128,.07);border-radius:10px">'
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">'
-    +'<span style="font-size:11px;color:var(--ok);font-weight:700">実測 ── いまの実装で1イベントを丸ごと運用</span>'
+    +'<span style="font-size:11px;color:var(--ok);font-weight:700">実測単価 × 想定運用（1イベント'+MEASURED_CALLS+'回）</span>'
     +'<b style="font-family:var(--mono);font-size:17px;color:var(--ok)">¥'+MEASURED_YEN+'</b></div>'
     +'<div style="font-size:10px;color:var(--t2);font-family:var(--mono);margin-top:5px;line-height:1.6">'
     +'AI呼び出し'+MEASURED_CALLS+'回の合計（上表の単価×回数）。混雑・暑熱・日陰・経路探索は決定的計算でLLM原価0円のため、'
@@ -1627,7 +1631,7 @@ function ruleDoc(kind,c){
     hr("課題: 雑踏事故と熱中症は「現在の可視化」では防げない。密度が危険域に入る前に手を打つには予報が要る。");
     hr("解: 混雑と暑熱をひとつの予報に統合。NOAA太陽位置×影投影×WBGT×Fruin密度をすべて実計算。");
     hr("いまの入力例: "+c.date+"・"+c.weather+"・チケット"+fmt(c.tickets)+"枚 → ピーク"+c.peak.time+" "+fmt(c.peak.n)+"人／最大密度"+c.peakDensity.v+"人/m²／最大WBGT "+c.maxWBGT.v+"。");
-    hr("AIの必然性: この予報値から計画書・現場指示・来場者通知を生成（本ボタンが実デモ）。OrcaRouterで難易度別に振り分けコスト約8割減。");
+    hr("AIの必然性: この予報値から計画書・現場指示・来場者通知を生成（本ボタンが実デモ）。OrcaRouterで用途別に振り分けてコストを圧縮（削減率は審査向け画面のコスト表を参照）。");
     hr("独創性: 機能ではなく時間軸を変えた。同じ予報を制作・現場・来場者の3レンズで使う構造は、天気予報のメタファでしか成立しない。");
   }
   return L.join("\n");
@@ -1656,7 +1660,7 @@ async function generateDoc(kind){
     try{
       const r=await fetch(req.url,{
         method:"POST", headers:{"Content-Type":"application/json"},
-        signal:AbortSignal.timeout(35000), // planタスクは実測18.7秒・フォールバック段も見込んで余裕を持たせる
+        signal:AbortSignal.timeout(55000), // planは本番実測29.3秒。サーバー側 maxDuration=60 の内側で待ち切る
         body:JSON.stringify(req.body)
       });
       if(r.ok){

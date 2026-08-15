@@ -23,7 +23,7 @@
 | Icons | lucide-react | ^1.30.0 | UI icon |
 | AI routing | OrcaRouter API | OpenAI互換 `/v1` | 読解・起草・言語化（§3参照） |
 | HTTP client | native `fetch` | — | Server側からOrcaRouterを呼び出す |
-| Testing | Vitest | ^4 | 予測logic・リスク層・経路探索・原価計算・AI出力検証のunit test（75件） |
+| Testing | Vitest | ^4 | 予測logic・リスク層・経路探索・原価計算・AI出力検証のunit test（331件） |
 | 実行時検証 | 手書きの正規化層 | — | `normalizeIngested()` がAI出力をclamp・除外（Zodは未導入・§8） |
 | Hosting | Vercel | Hobby（関数60秒上限） | Web applicationとAPIのdeployment |
 | Source control | GitHub | private → 提出時にpublic化 | `a2239154301-coder/crowd-weather` |
@@ -113,7 +113,7 @@ Secretはcommitしない。localは `.env.local`（`.env.example` をコピー�
 ```bash
 npm install
 npm run typecheck   # tsc --noEmit（strict）
-npm test            # Vitest 75件: WBGT物理・総合リスク・経路探索・原価・AI出力正規化
+npm test            # Vitest 331件: WBGT物理・総合リスク・経路探索・原価・AI出力正規化
 npm run build       # 型チェック込みの本番ビルド
 npm run dev         # http://localhost:3000
 ```

@@ -3,6 +3,10 @@
 > 更新 2026-08-09
 > 判断の根拠 = 外部エンジニアのレビュー＋原案者による事前分析
 >
+> ⚠ **本書は 2026-08-09 時点のスナップショットです**（設計判断の経緯を残す目的の文書）。
+> その後の実装で変わった箇所があります。**現行の正は `README.md`・`docs/MEASUREMENTS.md`・
+> `docs/ORCAROUTER-SETUP.md` とコード本体**（`lib/ai/orca.ts` の `ROUTING` が実際の振り分けです）。
+>
 > **この文書は、外部のエンジニアがレビューできる粒度で書いています。** 「何を使っているか」だけでなく
 > 「なぜそれを選び、何を意図的に作らなかったか」まで書いてあります。
 
@@ -226,11 +230,17 @@ WBGT_日陰 ≒ 0.70 × 気温 + 0.06 × 湿度 + 0.8
 
 | task | 用途 | 頻度 | 第一候補（実測で選定） | フォールバック |
 |---|---|---|---|---|
-| `advice` | 予報値 → 運営判断 | イベント中・数回 | `google/gemini-2.5-flash-lite`（**2.48秒**） | `openai/gpt-4o-mini` → `anthropic/claude-haiku-4.5` |
-| `ingest` | 会場図面・過去計画書の読解 | 会場ごと1回 | `google/gemini-2.5-pro`（Vision + JSON Schema） | `openai/gpt-4o` |
-| `plan` | 雑踏警備計画書の起草 | イベントごと数回 | `anthropic/claude-sonnet-4.6`（18.7秒だが最も詳細） | `openai/gpt-4o` → `google/gemini-2.5-flash` |
+| `advice` | 予報値 → 運営判断 | イベント中・数回 | `orcarouter/cw-advice`（名前付きルーター・**1.1〜1.7秒**） | `google/gemini-2.5-flash-lite` → `openai/gpt-4o-mini` → `anthropic/claude-haiku-4.5` |
+| `ingest` | 会場図面・過去計画書の読解 | 会場ごと1回 | `openai/gpt-4.1`（Vision + JSON Schema・**9.5〜11.3秒**） | `openai/gpt-4o` → `google/gemini-2.5-flash-lite` |
+| `whatif` | 自由文 → シナリオ差分の翻訳 | 随時 | `openai/gpt-4.1` | — |
+| `plan` | 雑踏警備計画書の起草 | イベントごと数回 | `anthropic/claude-sonnet-4.6`（本番実測29.3秒だが最も詳細） | `openai/gpt-4o` → `google/gemini-2.5-flash` |
 
-方針を変えたいときは、この1箇所を書き換えるだけです。将来的にはOrcaRouterのダッシュボードで「名前付きルーター」を作り、`orcarouter/<name>` に差し替えれば**コードを触らずに**方針を変えられます。
+方針を変えたいときは、この1箇所を書き換えるだけです。**2026-08-13に、OrcaRouterのダッシュボードで
+「名前付きルーター」`cw-advice` を作って `advice` レーンを差し替え済みです**（許可モデル3つ・
+最安値優先。設定内容は `docs/ORCAROUTER-SETUP.md` §1）。これでコードを触らずに方針を変えられます。
+
+> ⚠ `ingest` に `google/gemini-2.5-pro` を採用予定と書いていましたが、**どう縮めても60秒に
+> 収まらないことが実測で判明**したため `openai/gpt-4.1` に差し替えました（`docs/MEASUREMENTS.md` §4）。
 
 ### 4-3. サーバー境界 `app/api/`
 
@@ -317,7 +327,11 @@ OrcaRouterの `models` + `route:"fallback"` を生HTTPで検証しましたが�
 | ストリーミング応答 | 送出開始後はフォールバックが効かなくなる。デモの可用性を優先 |
 | 写真からの3D復元 | §7参照。今回は会場図からの2.5D押し出しで足りる |
 
-**⚠️ デプロイ前に決めること**: `/api/advice` と `/api/models` に認証がありません。publicなVercel URLに出すと誰でも叩けて3,000円のクレジットが枯れます。Vercelのパスワード保護か簡易な合言葉ヘッダを入れてからデプロイします。
+**✅ 対応済み（2026-08-14）**: 当初この節には「`/api/advice` と `/api/models` に認証が無く、
+publicなVercel URLに出すとクレジットが枯れる」という未対応の課題を書いていました。
+現在は **`middleware.ts` の合言葉ゲート（HttpOnly Cookie・照合は `app/api/gate/route.ts` の
+定数時間比較）** として実装済みです。詳細は `README.md` と `docs/ORCAROUTER-SETUP.md`。
+なおこれはデモ期間の保護であって、本番運用の認証ではありません。
 
 ---
 
@@ -330,7 +344,7 @@ OrcaRouterの `models` + `route:"fallback"` を生HTTPで検証しましたが�
 | 03 | `lib/ai/cost.ts` — 実測単価表（`/v1/models` とダッシュボードで確認してから作る。**推定値を先に書かない**）。呼び出し回数・原価・粗利率の3数字 | ⑥ |
 | 04 | Guardrails（PII Shield）と Agent Firewall をワークスペース側で設定。脅威モデル1枚 | ⑦ |
 
-3Dモデリングと高精度ヒートマップのロードマップは **`docs/3Dヒートマップ構想.md`** に分けました。
+3Dモデリングと高精度ヒートマップのロードマップは **`docs/HEATMAP-ROADMAP.ja.md`** に分けました。
 
 ---
 

@@ -26,6 +26,9 @@ import {
  *   それ以外            → advice タスク（軽量モデル・速度優先）
  */
 
+// audience=responsible は plan タスク（上位モデル）へ載るため、planルートと同じ上限を持たせる。
+export const maxDuration = 60;
+
 type AdviceRequest = {
   mode?: "advice" | "directive" | "route";
   style?: "standard" | "easy";

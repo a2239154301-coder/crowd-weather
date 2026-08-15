@@ -186,7 +186,7 @@ export default function HeatmapConsole() {
       <style>{`@media (max-width: 900px){ .hm-split{grid-template-columns:1fr !important} }`}</style>
       <div style={{ maxWidth: 1360, margin: "0 auto", padding: "18px 18px 72px" }}>
         <a
-          href="/"
+          href="/internal"
           style={{
             display: "inline-flex",
             alignItems: "center",

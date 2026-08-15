@@ -147,7 +147,7 @@ AIが配信APIを直接叩ける経路は作っていません。
 | 層 | 内容 |
 |---|---|
 | APIキーの隔離 | `lib/ai/orca.ts` の1ファイルに集約。ブラウザからAIを直接叩ける経路は作らない |
-| アクセス制御 | 合言葉ゲート（`middleware.ts`・HttpOnly Cookie・定数時間比較）。**デモ期間の保護であって本番認証ではない** |
+| アクセス制御 | 合言葉ゲート。`middleware.ts` がCookieを検証し、`app/api/gate/route.ts` が定数時間比較で照合してHttpOnly Cookieを発行する。**デモ期間の保護であって本番認証ではない** |
 | 入力の保護 | OrcaRouter Guardrails / PII Shield。**標準検出器が日本の携帯番号を素通しする穴を実測で発見**しカスタム正規表現で対応 |
 | AI出力の検証 | サーバー側で実在確認。配置案19件中2件を棄却（実測） |
 | Agent Firewall | 遮断は実測済み。**本番は監視モード（audit-only）で運用中** |
