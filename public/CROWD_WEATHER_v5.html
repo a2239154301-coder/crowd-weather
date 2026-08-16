@@ -406,7 +406,8 @@ button:focus-visible,.switch input:focus-visible+.tr,input:focus-visible{outline
           <div class="row"><label><span data-ic="calendar"></span>開催日</label></div>
           <div class="daterow">
             <input type="date" id="dateIn" value="2026-08-22">
-            <button class="soonbtn" id="venueSoon" type="button"><span data-ic="image"></span>会場図アップロード<span class="soon">今後実装</span></button>
+            <input type="file" id="venueFileIn" accept="image/png,image/jpeg,image/webp" style="display:none">
+            <button class="soonbtn" id="venueSoon" type="button"><span data-ic="image"></span>会場図アップロード</button>
           </div>
         </div>
         <div class="ctl">
@@ -675,7 +676,7 @@ function solarPos(dateStr, hourDec){
 }
 
 /* --- 会場モデル (m単位 / x:東+ y:南+ / 240m×160m) --- */
-const ZONES=[
+let ZONES=[
   {id:"main", n:"メインステージ前", x:128,y:22,w:64,h:34, roof:0,    base:.18, evening:.38},
   {id:"sub",  n:"サブステージ",     x:20, y:20,w:44,h:30, roof:0,    base:.14, evening:.05},
   {id:"food", n:"フードコート",     x:24, y:74,w:50,h:34, roof:.45,  base:.17, evening:.13},
@@ -685,21 +686,15 @@ const ZONES=[
   {id:"egate",n:"東ゲート広場",     x:196,y:14, w:38,h:28,roof:0,    base:.08, evening:.10},
   {id:"prom", n:"中央プロムナード", x:88, y:24, w:30,h:110,roof:0,   base:.09, evening:.08},
 ];
-const BUILDINGS=[
+let BUILDINGS=[
   {n:"北側施設",           x:150,y:2, w:60,h:16, hgt:16},
   {n:"北側倉庫",           x:28, y:4, w:36,h:12, hgt:10},
   {n:"西側仮設棟",         x:2,  y:58,w:20,h:56, hgt:22},
   {n:"東管理棟",           x:224,y:56,w:14,h:44, hgt:14},
   {n:"北川倉庫2",           x:104,y:2, w:18,h:8,  hgt:12},
 ];
-ZONES.forEach(z=>{
-  z.area=z.w*z.h;
-  z.samples=[];
-  for(let i=0;i<5;i++)for(let j=0;j<4;j++)
-    z.samples.push([z.x+z.w*(i+0.5)/5, z.y+z.h*(j+0.5)/4]);
-});
 
-/* --- 影投影: 建物矩形 → 凸包ポリゴン --- */
+/* --- ポリゴン計算・影投影 --- */
 function convexHull(pts){
   pts=pts.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
   const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
@@ -716,6 +711,54 @@ function inPoly(x,y,poly){
   }
   return ins;
 }
+function polygonArea(pts) {
+  let a = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    a += (pts[j].x + pts[i].x) * (pts[j].y - pts[i].y);
+  }
+  return Math.abs(a / 2);
+}
+function centroid(pts) {
+  let cx = 0, cy = 0, a = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const f = pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+    cx += (pts[i].x + pts[j].x) * f;
+    cy += (pts[i].y + pts[j].y) * f;
+    a += f;
+  }
+  a *= 3;
+  return a === 0 ? { x: pts[0].x, y: pts[0].y } : { x: cx / a, y: cy / a };
+}
+function initZones() {
+  ZONES.forEach(z => {
+    if (z.shape) {
+      z.area = polygonArea(z.shape);
+      const minX = Math.min(...z.shape.map(p => p.x));
+      const maxX = Math.max(...z.shape.map(p => p.x));
+      const minY = Math.min(...z.shape.map(p => p.y));
+      const maxY = Math.max(...z.shape.map(p => p.y));
+      z.samples = [];
+      const stepsX = Math.max(3, Math.ceil((maxX - minX) / 10));
+      const stepsY = Math.max(3, Math.ceil((maxY - minY) / 10));
+      for (let i = 0; i < stepsX; i++) {
+        for (let j = 0; j < stepsY; j++) {
+          const px = minX + (maxX - minX) * (i + 0.5) / stepsX;
+          const py = minY + (maxY - minY) * (j + 0.5) / stepsY;
+          if (inPoly(px, py, z.shape.map(p => [p.x, p.y]))) {
+            z.samples.push([px, py]);
+          }
+        }
+      }
+      if (z.samples.length === 0) z.samples.push([minX + (maxX - minX) / 2, minY + (maxY - minY) / 2]);
+    } else {
+      z.area = z.w * z.h;
+      z.samples = [];
+      for (let i = 0; i < 5; i++) for (let j = 0; j < 4; j++)
+        z.samples.push([z.x + z.w * (i + 0.5) / 5, z.y + z.h * (j + 0.5) / 4]);
+    }
+  });
+}
+initZones();
 function shadowPolys(sun){
   if(sun.alt<=2) return null;                     // 日没帯 → 全域日陰扱い
   const L0=1/Math.tan(sun.alt*Math.PI/180);
@@ -723,7 +766,7 @@ function shadowPolys(sun){
   const ux=Math.sin(th), uy=-Math.cos(th);        // 画面座標(y南+)での影方向
   return BUILDINGS.map(b=>{
     const L=Math.min(b.hgt*L0, 320);
-    const c=[[b.x,b.y],[b.x+b.w,b.y],[b.x+b.w,b.y+b.h],[b.x,b.y+b.h]];
+    const c = b.shape ? b.shape.map(p => [p.x, p.y]) : [[b.x,b.y],[b.x+b.w,b.y],[b.x+b.w,b.y+b.h],[b.x,b.y+b.h]];
     return convexHull(c.concat(c.map(p=>[p[0]+ux*L,p[1]+uy*L])));
   });
 }
@@ -733,7 +776,15 @@ function tarpPatches(tarpMap){
   for(const z of ZONES){
     const n=tarpMap[z.id]||0;
     for(let k=0;k<n;k++){
-      const cx=z.x+z.w*(0.25+0.5*((k%2))), cy=z.y+z.h*(0.3+0.4*Math.floor(k/2));
+      let cx, cy;
+      if (z.shape) {
+        const c = centroid(z.shape);
+        cx = c.x + (k % 2 === 0 ? -4 : 4);
+        cy = c.y + (Math.floor(k / 2) * 8 - 4);
+      } else {
+        cx=z.x+z.w*(0.25+0.5*((k%2)));
+        cy=z.y+z.h*(0.3+0.4*Math.floor(k/2));
+      }
       out.push({x:cx-6,y:cy-6,w:12,h:12,zone:z.id});
     }
   }
@@ -965,7 +1016,8 @@ function renderCtx(){
 }
 
 /* ---------- canvas map ---------- */
-const MAPW=240, MAPH=160;
+const MAPW_DEFAULT=240, MAPH_DEFAULT=160;
+let MAPW=MAPW_DEFAULT, MAPH=MAPH_DEFAULT;
 function drawMap(){
   const cv=$("#map"); if(!cv) return;
   const ctx=cv.getContext("2d");
@@ -1001,25 +1053,47 @@ function drawMap(){
   /* buildings: zones are drawn after this so venue labels stay on top */
   for(const b of BUILDINGS){
     ctx.fillStyle="#151F38"; ctx.strokeStyle="#3A4F82";
-    ctx.fillRect(X(b.x),Y(b.y),b.w*sx,b.h*sy); ctx.strokeRect(X(b.x),Y(b.y),b.w*sx,b.h*sy);
-    ctx.fillStyle="#9FB0D8"; ctx.font="8.5px 'IBM Plex Mono',monospace";
-    ctx.fillText(b.n, X(b.x)+3, Y(b.y)+10);
+    if (b.shape) {
+      ctx.beginPath();
+      b.shape.forEach((pt, i) => i ? ctx.lineTo(X(pt.x), Y(pt.y)) : ctx.moveTo(X(pt.x), Y(pt.y)));
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      const c = centroid(b.shape);
+      ctx.fillStyle="#9FB0D8"; ctx.font="8.5px 'IBM Plex Mono',monospace";
+      ctx.fillText(b.n, X(c.x)-15, Y(c.y)+3);
+    } else {
+      ctx.fillRect(X(b.x),Y(b.y),b.w*sx,b.h*sy); ctx.strokeRect(X(b.x),Y(b.y),b.w*sx,b.h*sy);
+      ctx.fillStyle="#9FB0D8"; ctx.font="8.5px 'IBM Plex Mono',monospace";
+      ctx.fillText(b.n, X(b.x)+3, Y(b.y)+10);
+    }
   }
 
   /* zones */
   for(const z0 of ZONES){
     const z=p.zones.find(q=>q.id===z0.id);
+    if (!z) continue;
     const col=DCOL[z.dl];
+    
+    if (z0.shape) {
+      ctx.beginPath();
+      z0.shape.forEach((pt, i) => i ? ctx.lineTo(X(pt.x), Y(pt.y)) : ctx.moveTo(X(pt.x), Y(pt.y)));
+      ctx.closePath();
+    } else {
+      rr(ctx,X(z0.x),Y(z0.y),z0.w*sx,z0.h*sy,7);
+    }
+
     if(S.overlay!=="shade"){
       ctx.fillStyle=col+(z.dl>=3?"55":z.dl===2?"40":z.dl===1?"2E":"22");
-      rr(ctx,X(z0.x),Y(z0.y),z0.w*sx,z0.h*sy,7); ctx.fill();
+      ctx.fill();
     }
     ctx.strokeStyle=z.dl>=2?col:"#2E4270"; ctx.lineWidth=z.dl>=2?1.6:1;
-    rr(ctx,X(z0.x),Y(z0.y),z0.w*sx,z0.h*sy,7); ctx.stroke();
+    ctx.stroke();
+
+    const c = z0.shape ? centroid(z0.shape) : {x: z0.x + z0.w/2, y: z0.y + z0.h/2};
     ctx.fillStyle="#EAF1FC"; ctx.font="600 10.5px 'Noto Sans JP',sans-serif";
-    ctx.fillText(z0.n, X(z0.x)+7, Y(z0.y)+15);
+    ctx.fillText(z0.n, X(c.x)-25, Y(c.y)-6);
     ctx.fillStyle="#A7B6D8"; ctx.font="10px 'IBM Plex Mono',monospace";
-    ctx.fillText(f1(z.d)+"人/m²  日陰"+Math.round(z.sf*100)+"%", X(z0.x)+7, Y(z0.y)+28);
+    ctx.fillText(f1(z.d)+"人/m²  日陰"+Math.round(z.sf*100)+"%", X(c.x)-30, Y(c.y)+7);
   }
   /* sun compass */
   const cx=cssW-46, cy=44, R=22;
@@ -1432,8 +1506,77 @@ function renderJudge(){
 }
 
 /* ============================================================
-   ACTIONS ── ①現状を反映 ②指示を出力
+   ACTIONS ── ①現状を反映 ②指示を出力 ③会場図アップロード
    ============================================================ */
+async function handleVenueUpload(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  toast("画像を解析しています...");
+  try {
+    const bmp = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    let w = bmp.width, h = bmp.height;
+    if (w > 1024 || h > 1024) {
+      const r = Math.min(1024 / w, 1024 / h);
+      w = Math.round(w * r);
+      h = Math.round(h * r);
+    }
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(bmp, 0, 0, w, h);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.75));
+    if (!blob) throw new Error("画像変換に失敗しました");
+    const fd = new FormData();
+    fd.append("file", blob, "venue.jpg");
+
+    const res = await fetch("/api/ingest", {
+      method: "POST",
+      body: fd
+    });
+    if (!res.ok) throw new Error("解析エラー");
+    const data = await res.json();
+    if (data.venue) {
+      loadVenue(data.venue);
+      if (data.issues && data.issues.length) {
+        toast(`完了: ${data.issues.length}件の警告があります（コンソールを確認）`);
+        console.warn(data.issues);
+      } else {
+        toast("会場図の解析が完了しました");
+      }
+    } else {
+      toast("解析に失敗しました");
+    }
+  } catch(err) {
+    console.error(err);
+    toast("エラーが発生しました");
+  } finally {
+    e.target.value = "";
+  }
+}
+
+function loadVenue(v) {
+  MAPW = v.width || 1000;
+  MAPH = v.height || 700;
+  BUILDINGS = v.buildings.map(b => ({
+    n: b.name,
+    hgt: b.height,
+    shape: b.shape
+  }));
+  ZONES = v.zones.map(z => ({
+    id: z.id,
+    n: z.name,
+    base: z.base,
+    evening: z.base * 0.8,
+    roof: z.roofed ? 1 : 0,
+    shape: z.shape,
+    area: polygonArea(z.shape)
+  }));
+  initZones();
+  S.tarps = {};
+  update();
+}
 async function fetchLive(){
   const btn=$("#btnLive"); btn.disabled=true;
   const chip=$("#livechip");
@@ -1762,8 +1905,9 @@ function init(){
   $("#btnExportIcon").innerHTML=ic("download",16);
   $("#btnExport").addEventListener("click",exportPlan);
   window.addEventListener("beforeprint",()=>{ if(SERIES&&STAFF) buildPrintDoc(); });
-  /* 会場図アップロード（今後実装） */
-  $("#venueSoon").addEventListener("click",()=>toast("会場図アップロードは今後実装予定です（図面PDF→初期モデル自動生成）"));
+  /* 会場図アップロード */
+  $("#venueSoon").addEventListener("click",()=>$("#venueFileIn").click());
+  $("#venueFileIn").addEventListener("change",handleVenueUpload);
   $("#docClose").addEventListener("click",()=>$("#shade").classList.remove("on"));
   $("#shade").addEventListener("click",e=>{if(e.target.id==="shade")$("#shade").classList.remove("on");});
   $("#docRegen").addEventListener("click",()=>generateDoc(lastDocKind));
