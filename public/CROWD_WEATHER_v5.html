@@ -867,11 +867,17 @@ function computeAt(S,h,mode){
   /* ハード上限(=当日の入場規制): naive以外は超過ぶんを芝生・プロムナードへ退避 */
   if(mode!=="naive"){
     const relief=ws.filter(o=>o.z.id==="lawn"||o.z.id==="prom");
+    const safeRelief=relief.length>0 ? relief : ws; // フェイルセーフ: 退避先名がない会場図の場合は全体へ押し返す
     ws.forEach(o=>{
       const over=o.people-CAP*o.z.area;
       if(over>0){
         o.people=CAP*o.z.area;
-        relief.forEach(r=>{ if(r!==o) r.people+=over/relief.length; });
+        const targets=safeRelief.filter(r=>r!==o);
+        if(targets.length>0){
+          targets.forEach(r=>{ r.people+=over/targets.length; });
+        }else{
+          o.people+=over; // 退避先が1つもない（1ゾーンのみ等）場合はその場で溢れさせる
+        }
       }
     });
   }
